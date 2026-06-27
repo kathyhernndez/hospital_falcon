@@ -1,0 +1,1784 @@
+<!DOCTYPE html>
+<html lang="es" class="scroll-smooth">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HospitalesFalcon — Localiza a tus seres queridos</title>
+    <meta name="description" content="Plataforma solidaria para registrar y localizar personas afectadas por el terremoto en centros de salud y hospitales en el Estado Falcón. Encuentra a tus familiares.">
+
+    <!-- Tailwind CSS v3 CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        'sans': ['Inter', 'system-ui', '-apple-system', 'sans-serif'],
+                    },
+                    colors: {
+                        'hope': {
+                            50:  '#fffbeb',
+                            400: '#fbbf24',
+                            500: '#f59e0b',
+                        }
+                    },
+                    animation: {
+                        'fade-in': 'fadeIn 0.4s ease-out',
+                        'slide-up': 'slideUp 0.4s ease-out',
+                        'pulse-slow': 'pulse 3s ease-in-out infinite',
+                        'float': 'float 6s ease-in-out infinite',
+                    },
+                    keyframes: {
+                        fadeIn: {
+                            '0%':   { opacity: '0' },
+                            '100%': { opacity: '1' },
+                        },
+                        slideUp: {
+                            '0%':   { opacity: '0', transform: 'translateY(30px) scale(0.97)' },
+                            '100%': { opacity: '1', transform: 'translateY(0) scale(1)' },
+                        },
+                        float: {
+                            '0%, 100%': { transform: 'translateY(0px)' },
+                            '50%':     { transform: 'translateY(-10px)' },
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+
+    <!-- Google Fonts — Inter -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+          integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+          crossorigin="" />
+
+    <style>
+        /* ── Glassmorphism Utility ── */
+        .glass {
+            background: rgba(255, 255, 255, 0.12);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid rgba(255, 255, 255, 0.18);
+        }
+
+        /* ── Validation Tooltip ── */
+        .validation-tooltip {
+            position: absolute;
+            z-index: 9999;
+            background-color: #ef4444;
+            color: #ffffff;
+            font-size: 0.75rem;
+            padding: 0.375rem 0.75rem;
+            border-radius: 0.5rem;
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+            border: 1px solid #dc2626;
+            font-weight: 500;
+            pointer-events: none;
+            transition: opacity 0.2s, transform 0.2s;
+            opacity: 0;
+            transform: translateY(4px);
+            display: none;
+        }
+        .validation-tooltip.visible {
+            display: flex;
+            opacity: 1;
+            transform: translateY(0);
+        }
+        .validation-tooltip-arrow {
+            width: 0.5rem;
+            height: 0.5rem;
+            background-color: #ef4444;
+            transform: rotate(45deg);
+            position: absolute;
+            top: -0.25rem;
+            left: 1rem;
+            border-left: 1px solid #dc2626;
+            border-top: 1px solid #dc2626;
+        }
+
+        /* ── Custom scrollbar ── */
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: #f1f5f9; }
+        ::-webkit-scrollbar-thumb { background: #94a3b8; border-radius: 3px; }
+        ::-webkit-scrollbar-thumb:hover { background: #64748b; }
+
+        /* ── Modal backdrop ── */
+        .modal-backdrop {
+            background: rgba(15, 23, 42, 0.6);
+            backdrop-filter: blur(8px);
+            -webkit-backdrop-filter: blur(8px);
+        }
+
+        /* ── Animated gradient background ── */
+        .hero-gradient {
+            background: linear-gradient(135deg, #1e3a5f 0%, #1e40af 25%, #0e7490 50%, #059669 75%, #047857 100%);
+            background-size: 300% 300%;
+            animation: gradientShift 12s ease infinite;
+        }
+        @keyframes gradientShift {
+            0%   { background-position: 0% 50%; }
+            50%  { background-position: 100% 50%; }
+            100% { background-position: 0% 50%; }
+        }
+
+        /* ── Leaflet map height ── */
+        #map-registro { height: 220px; width: 100%; border-radius: 0.75rem; z-index: 1; }
+
+        /* ── Toast animation ── */
+        .toast-enter { animation: slideInRight 0.4s ease-out; }
+        .toast-exit  { animation: slideOutRight 0.3s ease-in forwards; }
+        @keyframes slideInRight {
+            0%   { transform: translateX(100%); opacity: 0; }
+            100% { transform: translateX(0);    opacity: 1; }
+        }
+        @keyframes slideOutRight {
+            0%   { transform: translateX(0);    opacity: 1; }
+            100% { transform: translateX(100%); opacity: 0; }
+        }
+
+        /* ── Card hover ── */
+        .card-hover {
+            transition: transform 0.25s ease, box-shadow 0.25s ease;
+        }
+        .card-hover:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
+        }
+
+        /* ── SVG wave ── */
+        .wave-divider {
+            position: absolute;
+            bottom: -1px;
+            left: 0;
+            width: 100%;
+            overflow: hidden;
+            line-height: 0;
+        }
+        .wave-divider svg {
+            position: relative;
+            display: block;
+            width: calc(100% + 1.3px);
+            height: 70px;
+        }
+
+        /* ── Photo upload preview ── */
+        .upload-zone {
+            border: 2px dashed #cbd5e1;
+            transition: border-color 0.2s, background-color 0.2s;
+        }
+        .upload-zone:hover, .upload-zone.drag-over {
+            border-color: #3b82f6;
+            background-color: #eff6ff;
+        }
+
+        /* ── Skeleton loader ── */
+        .skeleton {
+            background: linear-gradient(90deg, #e2e8f0 25%, #f1f5f9 50%, #e2e8f0 75%);
+            background-size: 200% 100%;
+            animation: shimmer 1.5s infinite;
+        }
+        @keyframes shimmer {
+            0%   { background-position: -200% 0; }
+            100% { background-position: 200% 0; }
+        }
+
+        /* ── Leaflet custom marker ── */
+        .hospital-marker {
+            background: #059669;
+            border: 3px solid #ffffff;
+            border-radius: 50%;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+        }
+        .hospital-marker-selected {
+            background: #dc2626;
+            border: 3px solid #ffffff;
+        }
+    </style>
+</head>
+
+<body class="font-sans bg-slate-50 text-slate-800 antialiased">
+
+    <!-- ════════════════════════════════════════════════════════════════════
+         HERO / HEADER
+         ════════════════════════════════════════════════════════════════════ -->
+    <header class="hero-gradient relative overflow-hidden">
+        <!-- Floating decorative shapes -->
+        <div class="absolute inset-0 overflow-hidden pointer-events-none" aria-hidden="true">
+            <div class="absolute -top-20 -right-20 w-72 h-72 bg-white/5 rounded-full animate-float"></div>
+            <div class="absolute top-40 -left-16 w-48 h-48 bg-white/5 rounded-full animate-float" style="animation-delay: 2s;"></div>
+            <div class="absolute bottom-20 right-1/4 w-32 h-32 bg-emerald-400/10 rounded-full animate-float" style="animation-delay: 4s;"></div>
+        </div>
+
+        <!-- Nav -->
+        <nav class="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex items-center justify-between">
+            <div class="flex items-center gap-3">
+                <div class="w-10 h-10 bg-white/20 rounded-xl flex items-center justify-center">
+                    <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M4.26 10.147a60.438 60.438 0 0 0-.491 6.347A48.62 48.62 0 0 1 12 20.904a48.62 48.62 0 0 1 8.232-4.41 60.46 60.46 0 0 0-.491-6.347m-15.482 0a50.636 50.636 0 0 0-2.658-.813A59.906 59.906 0 0 1 12 3.493a59.903 59.903 0 0 1 10.399 5.84c-.896.248-1.783.52-2.658.814m-15.482 0A50.717 50.717 0 0 1 12 13.489a50.702 50.702 0 0 1 7.74-3.342M6.75 15a.75.75 0 1 0 0-1.5.75.75 0 0 0 0 1.5Zm0 0v-3.675A55.378 55.378 0 0 1 12 8.443m-7.007 11.55A5.981 5.981 0 0 0 6.75 15.75v-1.5" />
+                    </svg>
+                </div>
+                <span class="text-white font-bold text-lg tracking-tight">HospitalesFalcon</span>
+            </div>
+            
+            <div class="flex items-center gap-4">
+                {% if current_user.is_authenticated %}
+                <a href="/dashboard/upload" class="hidden sm:inline-flex items-center gap-2 text-white/90 hover:text-white font-medium text-sm transition-colors">
+                    Panel de Carga Masiva
+                </a>
+                <a href="/logout" class="hidden sm:inline-flex items-center gap-2 bg-white/10 hover:bg-white/20 text-white font-semibold px-4 py-2 rounded-xl transition-colors text-sm">
+                    Cerrar Sesión
+                </a>
+                {% else %}
+                <a href="/login" class="hidden sm:inline-flex items-center gap-2 text-white/90 hover:text-white font-medium text-sm transition-colors">
+                    Acceso Personal Médico
+                </a>
+                {% endif %}
+                <button onclick="openModal()"
+                        class="hidden sm:inline-flex items-center gap-2 bg-white/15 hover:bg-white/25 text-white font-semibold px-5 py-2.5 rounded-xl border border-white/20 transition-all duration-200 hover:scale-105 active:scale-95">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+                    </svg>
+                    Registrar Persona
+                </button>
+            </div>
+        </nav>
+
+        <!-- Hero content -->
+        <div class="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-8 pb-28 sm:pt-12 sm:pb-36 text-center">
+            <div class="inline-flex items-center gap-2 bg-white/10 border border-white/20 rounded-full px-4 py-1.5 mb-6">
+                <span class="relative flex h-2.5 w-2.5">
+                    <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                    <span class="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-400"></span>
+                </span>
+                <span class="text-white/90 text-sm font-medium">Plataforma solidaria activa</span>
+            </div>
+
+            <h1 class="text-3xl sm:text-5xl lg:text-6xl font-extrabold text-white leading-tight mb-5">
+                Localiza a tus seres queridos<br>
+                <span class="text-emerald-300">en centros de salud</span>
+            </h1>
+            <p class="text-lg sm:text-xl text-blue-100 max-w-2xl mx-auto mb-8 leading-relaxed">
+                Registra o busca personas afectados por el terremoto que se encuentran en hospitales y centros de emergencia en el Estado Falcón
+            </p>
+
+            <!-- CTA button (mobile-friendly) -->
+            <button onclick="openModal()"
+                    id="btn-registrar-hero"
+                    class="inline-flex items-center gap-2.5 bg-emerald-500 hover:bg-emerald-600 text-white font-bold px-8 py-4 rounded-2xl shadow-lg shadow-emerald-500/30 transition-all duration-200 hover:scale-105 hover:shadow-xl hover:shadow-emerald-500/40 active:scale-95 text-lg">
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M18 7.5v3m0 0v3m0-3h3m-3 0h-3m-2.25-4.125a3.375 3.375 0 1 1-6.75 0 3.375 3.375 0 0 1 6.75 0ZM3 19.235v-.11a6.375 6.375 0 0 1 12.75 0v.109A12.318 12.318 0 0 1 9.374 21c-2.331 0-4.512-.645-6.374-1.766Z" />
+                </svg>
+                Registrar Paciente / Persona
+            </button>
+
+            <!-- Stats -->
+            <div class="mt-10 flex flex-wrap items-center justify-center gap-6 sm:gap-10">
+                <div class="glass rounded-2xl px-6 py-3 text-center">
+                    <p class="text-2xl sm:text-3xl font-extrabold text-white" id="stat-total">{{ total }}</p>
+                    <p class="text-blue-200 text-sm font-medium">Personas registradas</p>
+                </div>
+                <div class="glass rounded-2xl px-6 py-3 text-center">
+                    <p class="text-2xl sm:text-3xl font-extrabold text-white">{{ total_centers }}</p>
+                    <p class="text-blue-200 text-sm font-medium">Centros de salud</p>
+                </div>
+                <div class="glass rounded-2xl px-6 py-3 text-center">
+                    <p class="text-2xl sm:text-3xl font-extrabold text-white">25</p>
+                    <p class="text-blue-200 text-sm font-medium">Municipios cubiertos</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Wave divider -->
+        <div class="wave-divider">
+            <svg data-name="wave" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 120" preserveAspectRatio="none">
+                <path d="M0,0V46.29c47.79,22.2,103.59,32.17,158,28,70.36-5.37,136.33-33.31,206.8-37.5C438.64,32.43,512.34,53.67,583,72.05c69.27,18,138.3,24.88,209.4,13.08,36.15-6.01,68.64-16.67,104.08-24.29,30.19-6.5,62.7-9.59,93.52-4.61V0Z"
+                      fill="#f8fafc" opacity=".3"></path>
+                <path d="M0,0V15.81C13,36.92,27.64,56.86,47.69,72.05,99.41,111.27,165,111,224.58,91.58c31.15-10.15,60.09-26.07,89.67-39.8,40.92-19,84.73-46,130.83-49.67,36.26-2.85,70.9,9.42,98.6,31.56,31.77,25.39,62.32,62,103.63,73,40.44,10.79,81.35-6.69,119.13-24.28s75.16-39,116.92-43.05c59.73-5.85,113.28,22.88,168.9,38.84,30.2,8.66,59,6.17,87.09-7.5,22.43-10.89,48-26.93,60.65-49.24V0Z"
+                      fill="#f8fafc" opacity=".5"></path>
+                <path d="M0,0V5.63C149.93,59,314.09,71.32,475.83,42.57c43-7.64,84.23-20.12,127.61-26.46,59-8.63,112.48,12.24,165.56,35.4C827.93,77.22,886,95.24,951.2,90c86.53-7,172.46-45.71,248.8-84.81V0Z"
+                      fill="#f8fafc"></path>
+            </svg>
+        </div>
+    </header>
+
+    <!-- ════════════════════════════════════════════════════════════════════
+         SEARCH SECTION
+         ════════════════════════════════════════════════════════════════════ -->
+    <section class="relative z-10 -mt-10 max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 mb-10">
+        <div class="bg-white rounded-2xl shadow-xl shadow-slate-200/60 p-4 sm:p-6 border border-slate-100">
+            <div class="flex flex-col sm:flex-row gap-3">
+                <!-- Filter selector -->
+                <div class="relative min-w-[160px]">
+                    <select id="search-filter"
+                            class="appearance-none w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3.5 pr-10 text-sm font-medium text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all cursor-pointer">
+                        <option value="nombre">🔤 Por Nombre</option>
+                        <option value="cedula">🪪 Por Cédula</option>
+                        <option value="centro">🏥 Por Centro de Salud</option>
+                    </select>
+                    <svg class="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="m19.5 8.25-7.5 7.5-7.5-7.5" />
+                    </svg>
+                </div>
+
+                <!-- Search input -->
+                <div class="relative flex-1">
+                    <svg class="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z" />
+                    </svg>
+                    <input id="search-input"
+                           type="text"
+                           placeholder="Buscar persona, cédula o centro de salud…"
+                           autocomplete="off"
+                           class="w-full bg-slate-50 border border-slate-200 rounded-xl pl-12 pr-4 py-3.5 text-sm text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all">
+                </div>
+
+                <!-- Search button -->
+                <button onclick="performSearch()"
+                        class="flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold px-6 py-3.5 rounded-xl transition-all duration-200 hover:shadow-lg hover:shadow-blue-500/25 active:scale-95">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z" />
+                    </svg>
+                    Buscar
+                </button>
+            </div>
+        </div>
+    </section>
+
+    <!-- ════════════════════════════════════════════════════════════════════
+         RESULTS GRID
+         ════════════════════════════════════════════════════════════════════ -->
+    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-20">
+        <!-- Results header -->
+        <div class="flex items-center justify-between mb-6">
+            <div>
+                <h2 class="text-xl sm:text-2xl font-bold text-slate-800">Personas Registradas</h2>
+                <p class="text-slate-500 text-sm mt-1" id="results-count">
+                    Mostrando {{ registros|length }} registro{{ 's' if registros|length != 1 else '' }}
+                </p>
+            </div>
+            <button onclick="openModal()"
+                    class="sm:hidden inline-flex items-center gap-2 bg-emerald-500 hover:bg-emerald-600 text-white font-semibold px-4 py-2.5 rounded-xl transition-all active:scale-95 text-sm">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+                </svg>
+                Registrar
+            </button>
+        </div>
+
+        <!-- Cards grid -->
+        <div id="results-grid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+        </div>
+
+        <!-- Pagination Controls -->
+        <div id="pagination-container" class="hidden flex flex-col sm:flex-row items-center justify-between gap-4 mt-8 pt-6 border-t border-slate-100">
+            <span id="pagination-info" class="text-sm text-slate-500 font-medium">
+                Mostrando 0 - 0 de 0 registros
+            </span>
+            <div id="pagination-buttons" class="flex items-center gap-2">
+                <!-- Dynamic buttons -->
+            </div>
+        </div>
+
+        <!-- Empty state -->
+        <div id="empty-state" class="{% if registros %}hidden{% endif %} flex flex-col items-center justify-center py-20 text-center">
+            <div class="w-24 h-24 bg-slate-100 rounded-3xl flex items-center justify-center mb-6">
+                <svg class="w-12 h-12 text-slate-300" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M18 18.72a9.094 9.094 0 0 0 3.741-.479 3 3 0 0 0-4.682-2.72m.94 3.198.001.031c0 .225-.012.447-.037.666A11.944 11.944 0 0 1 12 21c-2.17 0-4.207-.576-5.963-1.584A6.062 6.062 0 0 1 6 18.719m12 0a5.971 5.971 0 0 0-.941-3.197m0 0A5.995 5.995 0 0 0 12 12.75a5.995 5.995 0 0 0-5.058 2.772m0 0a3 3 0 0 0-4.681 2.72 8.986 8.986 0 0 0 3.74.477m.94-3.197a5.971 5.971 0 0 0-.94 3.197M15 6.75a3 3 0 1 1-6 0 3 3 0 0 1 6 0Zm6 3a2.25 2.25 0 1 1-4.5 0 2.25 2.25 0 0 1 4.5 0Zm-13.5 0a2.25 2.25 0 1 1-4.5 0 2.25 2.25 0 0 1 4.5 0Z" />
+                </svg>
+            </div>
+            <h3 class="text-lg font-semibold text-slate-600 mb-2">No se encontraron registros</h3>
+            <p class="text-slate-400 text-sm max-w-md">Aún no hay personas registradas o tu búsqueda no coincidió con ningún resultado. Puedes registrar a una persona haciendo clic en el botón superior.</p>
+        </div>
+
+        <!-- Loading skeleton (hidden by default) -->
+        <div id="loading-skeleton" class="hidden grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+            <div class="bg-white rounded-2xl border border-slate-100 p-5" aria-hidden="true">
+                <div class="flex items-start gap-4">
+                    <div class="w-16 h-16 rounded-xl skeleton"></div>
+                    <div class="flex-1 space-y-2">
+                        <div class="h-4 skeleton rounded w-3/4"></div>
+                        <div class="h-3 skeleton rounded w-1/2"></div>
+                    </div>
+                </div>
+                <div class="mt-4 space-y-2">
+                    <div class="h-3 skeleton rounded w-full"></div>
+                    <div class="h-3 skeleton rounded w-2/3"></div>
+                </div>
+            </div>
+            <div class="bg-white rounded-2xl border border-slate-100 p-5 hidden sm:block" aria-hidden="true">
+                <div class="flex items-start gap-4">
+                    <div class="w-16 h-16 rounded-xl skeleton"></div>
+                    <div class="flex-1 space-y-2">
+                        <div class="h-4 skeleton rounded w-3/4"></div>
+                        <div class="h-3 skeleton rounded w-1/2"></div>
+                    </div>
+                </div>
+                <div class="mt-4 space-y-2">
+                    <div class="h-3 skeleton rounded w-full"></div>
+                    <div class="h-3 skeleton rounded w-2/3"></div>
+                </div>
+            </div>
+            <div class="bg-white rounded-2xl border border-slate-100 p-5 hidden lg:block" aria-hidden="true">
+                <div class="flex items-start gap-4">
+                    <div class="w-16 h-16 rounded-xl skeleton"></div>
+                    <div class="flex-1 space-y-2">
+                        <div class="h-4 skeleton rounded w-3/4"></div>
+                        <div class="h-3 skeleton rounded w-1/2"></div>
+                    </div>
+                </div>
+                <div class="mt-4 space-y-2">
+                    <div class="h-3 skeleton rounded w-full"></div>
+                    <div class="h-3 skeleton rounded w-2/3"></div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- ════════════════════════════════════════════════════════════════════
+         REGISTRATION MODAL
+         ════════════════════════════════════════════════════════════════════ -->
+    <div id="modal-overlay"
+         class="hidden fixed inset-0 z-50 modal-backdrop overflow-y-auto"
+         onclick="if(event.target===this) closeModal()">
+        <div class="min-h-full flex items-start justify-center p-4 sm:p-8 pt-8 sm:pt-12">
+            <div id="modal-content"
+                 class="bg-white rounded-3xl shadow-2xl w-full max-w-2xl animate-slide-up relative">
+
+                <!-- Modal header -->
+                <div class="sticky top-0 z-10 bg-white/95 backdrop-blur-sm rounded-t-3xl border-b border-slate-100 px-6 py-5 flex items-center justify-between">
+                    <div>
+                        <h2 class="text-xl font-bold text-slate-800 flex items-center gap-2">
+                            <span class="w-8 h-8 bg-emerald-100 rounded-lg flex items-center justify-center">
+                                <svg class="w-5 h-5 text-emerald-600" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M18 7.5v3m0 0v3m0-3h3m-3 0h-3m-2.25-4.125a3.375 3.375 0 1 1-6.75 0 3.375 3.375 0 0 1 6.75 0ZM3 19.235v-.11a6.375 6.375 0 0 1 12.75 0v.109A12.318 12.318 0 0 1 9.374 21c-2.331 0-4.512-.645-6.374-1.766Z" />
+                                </svg>
+                            </span>
+                            Registrar Persona
+                        </h2>
+                        <p class="text-sm text-slate-500 mt-0.5 ml-10">Complete los datos para registrar a la persona</p>
+                    </div>
+                    <button onclick="closeModal()"
+                            class="w-9 h-9 flex items-center justify-center rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-500 hover:text-slate-700 transition-colors">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12" />
+                        </svg>
+                    </button>
+                </div>
+
+                <!-- Form -->
+                <form id="form-registro" enctype="multipart/form-data" class="p-6 space-y-7" novalidate>
+
+                    <!-- ── Section: Datos del Paciente ── -->
+                    <fieldset>
+                        <legend class="flex items-center gap-2 text-sm font-semibold text-slate-700 uppercase tracking-wider mb-4">
+                            <svg class="w-4 h-4 text-blue-500" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15.75 6a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0ZM4.501 20.118a7.5 7.5 0 0 1 14.998 0A17.933 17.933 0 0 1 12 21.75c-2.676 0-5.216-.584-7.499-1.632Z"/></svg>
+                            Datos del Paciente
+                        </legend>
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            <!-- Nombre y Apellido -->
+                            <div class="sm:col-span-2">
+                                <label for="nombre_apellido" class="block text-sm font-medium text-slate-700 mb-1.5">
+                                    Nombre y Apellido <span class="text-red-500">*</span>
+                                </label>
+                                <input type="text" id="nombre_apellido" name="nombre_apellido" required
+                                       placeholder="Ej: María García López"
+                                       class="w-full border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all placeholder-slate-400">
+                            </div>
+                            <!-- Cédula -->
+                            <div>
+                                <label for="cedula" class="block text-sm font-medium text-slate-700 mb-1.5">
+                                    Cédula de Identidad
+                                </label>
+                                <input type="text" id="cedula" name="cedula"
+                                       placeholder="Ej: V-12345678"
+                                       class="w-full border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all placeholder-slate-400">
+                            </div>
+                            <!-- Edad -->
+                            <div>
+                                <label for="edad" class="block text-sm font-medium text-slate-700 mb-1.5">
+                                    Edad
+                                </label>
+                                <input type="number" id="edad" name="edad" min="0" max="150"
+                                       placeholder="Ej: 45"
+                                       class="w-full border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all placeholder-slate-400">
+                            </div>
+                        </div>
+                    </fieldset>
+
+                    <hr class="border-slate-100">
+
+                    <!-- ── Section: Ubicación ── -->
+                    <fieldset>
+                        <legend class="flex items-center gap-2 text-sm font-semibold text-slate-700 uppercase tracking-wider mb-4">
+                            <svg class="w-4 h-4 text-emerald-500" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15 10.5a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z"/><path stroke-linecap="round" stroke-linejoin="round" d="M19.5 10.5c0 7.142-7.5 11.25-7.5 11.25S4.5 17.642 4.5 10.5a7.5 7.5 0 1 1 15 0Z"/></svg>
+                            Ubicación
+                        </legend>
+                        <div class="space-y-4">
+                            <!-- Sector / Ciudad -->
+                            <div>
+                                <label for="sector_ciudad" class="block text-sm font-medium text-slate-700 mb-1.5">
+                                    Sector / Ciudad <span class="text-red-500">*</span>
+                                </label>
+                                <input type="text" id="sector_ciudad" name="sector_ciudad" required
+                                       placeholder="Ej: Caracas, Parroquia San Juan"
+                                       class="w-full border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all placeholder-slate-400">
+                            </div>
+
+                            <!-- Map -->
+                            <div>
+                                <label class="block text-sm font-medium text-slate-700 mb-1.5">
+                                    Seleccione un centro de salud en el mapa
+                                    <span class="text-slate-400 font-normal">(o escríbalo abajo)</span>
+                                </label>
+                                <div class="rounded-xl overflow-hidden border border-slate-200 shadow-sm">
+                                    <div id="map-registro"></div>
+                                </div>
+                                <p class="mt-1.5 text-xs text-slate-400 flex items-center gap-1">
+                                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="m11.25 11.25.041-.02a.75.75 0 0 1 1.063.852l-.708 2.836a.75.75 0 0 0 1.063.853l.041-.021M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-9-3.75h.008v.008H12V8.25Z"/></svg>
+                                    Haga clic en un marcador para autocompletar el centro de salud
+                                </p>
+                            </div>
+
+                            <!-- Centro de salud -->
+                            <div>
+                                <label for="health_center_id" class="block text-sm font-medium text-slate-700 mb-1.5">
+                                    Centro de Salud / Hospital <span class="text-red-500">*</span>
+                                </label>
+                                <div id="centro_salud_container">
+                                    <select id="health_center_id" name="health_center_id" required
+                                            class="w-full border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all placeholder-slate-400 bg-white">
+                                        <option value="">Cargando centros...</option>
+                                    </select>
+                                </div>
+                                <div class="mt-2 flex items-center gap-2">
+                                    <input type="checkbox" id="toggle_nuevo_centro" onchange="toggleNuevoCentro(this)" class="w-4 h-4 text-emerald-600 rounded">
+                                    <label for="toggle_nuevo_centro" class="text-sm text-slate-600 cursor-pointer">El centro no está en la lista (sugerir nuevo)</label>
+                                </div>
+                                
+                                <!-- Campos para nuevo centro -->
+                                <div id="nuevo_centro_fields" class="hidden mt-3 p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-3">
+                                    <div>
+                                        <label for="nuevo_centro_nombre" class="block text-xs font-medium text-slate-700 mb-1">Nombre del Centro Nuevo</label>
+                                        <input type="text" id="nuevo_centro_nombre" name="nuevo_centro_nombre"
+                                               class="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500">
+                                    </div>
+                                    <div>
+                                        <label for="nuevo_centro_tipo" class="block text-xs font-medium text-slate-700 mb-1">Tipo de Centro</label>
+                                        <select id="nuevo_centro_tipo" name="nuevo_centro_tipo"
+                                                class="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500">
+                                            <option value="">Seleccione tipo...</option>
+                                            <option value="Hospital">Hospital</option>
+                                            <option value="CDI">CDI</option>
+                                            <option value="Ambulatorio">Ambulatorio</option>
+                                            <option value="Clinica Privada">Clínica Privada</option>
+                                            <option value="Otro">Otro</option>
+                                        </select>
+                                    </div>
+                                </div>
+                            </div>
+                            <!-- Hidden lat/lng for map integration (optional now, but kept for UI feedback) -->
+                            <input type="hidden" id="latitud" name="latitud">
+                            <input type="hidden" id="longitud" name="longitud">
+                        </div>
+                    </fieldset>
+
+                    <hr class="border-slate-100">
+
+                    <!-- ── Section: Quien Registra ── -->
+                    <fieldset>
+                        <legend class="flex items-center gap-2 text-sm font-semibold text-slate-700 uppercase tracking-wider mb-4">
+                            <svg class="w-4 h-4 text-purple-500" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M2.25 6.75c0 8.284 6.716 15 15 15h2.25a2.25 2.25 0 0 0 2.25-2.25v-1.372c0-.516-.351-.966-.852-1.091l-4.423-1.106c-.44-.11-.902.055-1.173.417l-.97 1.293c-.282.376-.769.542-1.21.38a12.035 12.035 0 0 1-7.143-7.143c-.162-.441.004-.928.38-1.21l1.293-.97c.363-.271.527-.734.417-1.173L6.963 3.102a1.125 1.125 0 0 0-1.091-.852H4.5A2.25 2.25 0 0 0 2.25 4.5v2.25Z"/></svg>
+                            Datos del Registrante
+                        </legend>
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            <!-- Quién registra -->
+                            <div>
+                                <label for="quien_registra" class="block text-sm font-medium text-slate-700 mb-1.5">
+                                    ¿Quién registra? <span class="text-red-500">*</span>
+                                </label>
+                                <div class="relative">
+                                    <select id="quien_registra" name="quien_registra" required
+                                            class="appearance-none w-full border border-slate-200 rounded-xl px-4 py-3 pr-10 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all cursor-pointer">
+                                        <option value="">Seleccionar…</option>
+                                        <option value="Familiar">👨‍👩‍👧 Familiar</option>
+                                        <option value="Particular/Amigo">🤝 Particular / Amigo</option>
+                                        <option value="Yo mismo">🙋 Yo mismo</option>
+                                    </select>
+                                    <svg class="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="m19.5 8.25-7.5 7.5-7.5-7.5"/></svg>
+                                </div>
+                            </div>
+                            <!-- Teléfono -->
+                            <div>
+                                <label for="telefono_contacto" class="block text-sm font-medium text-slate-700 mb-1.5">
+                                    Teléfono de contacto <span class="text-red-500">*</span>
+                                </label>
+                                <input type="tel" id="telefono_contacto" name="telefono_contacto" required
+                                       placeholder="Ej: 0412-1234567"
+                                       class="w-full border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all placeholder-slate-400">
+                            </div>
+                            <!-- Trabaja en centro -->
+                            <div class="sm:col-span-2">
+                                <label class="inline-flex items-center gap-3 cursor-pointer group">
+                                    <input type="checkbox" id="trabaja_centro" name="trabaja_centro"
+                                           class="w-5 h-5 text-blue-600 bg-slate-100 border-slate-300 rounded focus:ring-blue-500 focus:ring-2 transition-all cursor-pointer">
+                                    <span class="text-sm text-slate-700 group-hover:text-slate-900 transition-colors">¿Trabajas en este centro de salud?</span>
+                                </label>
+                            </div>
+                        </div>
+                    </fieldset>
+
+                    <hr class="border-slate-100">
+
+                    <!-- ── Section: Foto ── -->
+                    <fieldset>
+                        <legend class="flex items-center gap-2 text-sm font-semibold text-slate-700 uppercase tracking-wider mb-4">
+                            <svg class="w-4 h-4 text-amber-500" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="m2.25 15.75 5.159-5.159a2.25 2.25 0 0 1 3.182 0l5.159 5.159m-1.5-1.5 1.409-1.409a2.25 2.25 0 0 1 3.182 0l2.909 2.909M3.75 21h16.5a1.5 1.5 0 0 0 1.5-1.5V6a1.5 1.5 0 0 0-1.5-1.5H3.75A1.5 1.5 0 0 0 2.25 6v13.5A1.5 1.5 0 0 0 3.75 21ZM15.75 9a.75.75 0 1 1-1.5 0 .75.75 0 0 1 1.5 0Z"/></svg>
+                            Fotografía <span class="text-slate-400 font-normal text-xs ml-1">(opcional)</span>
+                        </legend>
+                        <div class="upload-zone rounded-xl p-6 text-center cursor-pointer transition-all"
+                             id="upload-zone"
+                             onclick="document.getElementById('foto').click()">
+                            <div id="upload-placeholder">
+                                <div class="w-14 h-14 mx-auto mb-3 bg-slate-100 rounded-xl flex items-center justify-center">
+                                    <svg class="w-7 h-7 text-slate-400" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5m-13.5-9L12 3m0 0 4.5 4.5M12 3v13.5"/></svg>
+                                </div>
+                                <p class="text-sm font-medium text-slate-600">Haz clic para subir una foto</p>
+                                <p class="text-xs text-slate-400 mt-1">PNG, JPG, WEBP — Máx. 5MB</p>
+                            </div>
+                            <div id="upload-preview" class="hidden">
+                                <img id="preview-img" src="" alt="Vista previa" class="w-24 h-24 mx-auto rounded-xl object-cover border-2 border-slate-200 shadow-sm mb-2">
+                                <p id="preview-name" class="text-sm text-slate-600 font-medium"></p>
+                                <button type="button" onclick="event.stopPropagation(); clearPhoto()"
+                                        class="mt-2 text-xs text-red-500 hover:text-red-700 font-medium">✕ Quitar foto</button>
+                            </div>
+                        </div>
+                        <input type="file" id="foto" name="foto" accept="image/*" class="hidden" onchange="previewPhoto(this)">
+                    </fieldset>
+
+                    <!-- ── Privacy notice ── -->
+                    <div class="bg-blue-50 border border-blue-100 rounded-xl p-4 flex gap-3">
+                        <svg class="w-5 h-5 text-blue-500 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75 11.25 15 15 9.75m-3-7.036A11.959 11.959 0 0 1 3.598 6 11.99 11.99 0 0 0 3 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285Z"/></svg>
+                        <p class="text-xs text-blue-700 leading-relaxed">
+                            <strong>Aviso de privacidad:</strong> Los datos ingresados se usarán exclusivamente para facilitar la localización de familiares y personas en centros de salud.
+                            Al registrar, usted consiente el uso de esta información con dicho fin. No compartimos datos con terceros.
+                        </p>
+                    </div>
+
+                    <!-- ── Actions ── -->
+                    <div class="flex flex-col-reverse sm:flex-row items-center gap-3 pt-2">
+                        <button type="button" onclick="closeModal()"
+                                class="w-full sm:w-auto px-6 py-3 rounded-xl border border-slate-200 text-slate-600 font-medium text-sm hover:bg-slate-50 transition-colors">
+                            Cancelar
+                        </button>
+                        <button type="submit" id="btn-submit"
+                                class="w-full sm:w-auto sm:flex-1 flex items-center justify-center gap-2 bg-emerald-500 hover:bg-emerald-600 text-white font-bold px-8 py-3 rounded-xl shadow-lg shadow-emerald-500/20 transition-all duration-200 hover:shadow-xl hover:shadow-emerald-500/30 active:scale-95 text-sm">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="m4.5 12.75 6 6 9-13.5"/></svg>
+                            Registrar Persona
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- ════════════════════════════════════════════════════════════════════
+         DETALLE DE REGISTRADO MODAL
+         ════════════════════════════════════════════════════════════════════ -->
+    <div id="modal-detalle-overlay"
+         class="hidden fixed inset-0 z-50 modal-backdrop overflow-y-auto"
+         onclick="if(event.target===this) closeDetalleModal()">
+        <div class="min-h-full flex items-start justify-center p-4 sm:p-8 pt-12 sm:pt-24">
+            <div id="modal-detalle-content"
+                 class="bg-white rounded-3xl shadow-2xl w-full max-w-lg animate-slide-up relative overflow-hidden">
+                
+                <!-- Background decor / header -->
+                <div class="h-24 bg-gradient-to-r from-blue-600 to-emerald-600 relative">
+                    <button onclick="closeDetalleModal()"
+                            class="absolute top-4 right-4 w-9 h-9 flex items-center justify-center rounded-xl bg-white/20 hover:bg-white/30 text-white transition-colors">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12" />
+                        </svg>
+                    </button>
+                </div>
+
+                <!-- Content Area -->
+                <div class="px-6 pb-8 pt-0 relative">
+                    <!-- Photo / Avatar centered on border -->
+                    <div class="flex justify-center -mt-16 mb-5">
+                        <div id="detalle-foto-container" class="relative">
+                            <!-- Image will be inserted here dynamically -->
+                        </div>
+                    </div>
+
+                    <!-- Info -->
+                    <div class="text-center mb-6">
+                        <h2 id="detalle-nombre" class="text-2xl font-black text-slate-800 tracking-tight">Cargando...</h2>
+                        <div class="flex items-center justify-center gap-1.5 mt-1.5 text-emerald-600 font-semibold text-sm">
+                            <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+                                <path d="M11.584 2.376a.75.75 0 0 1 .832 0l9 6a.75.75 0 1 1-.832 1.248L12 3.901 3.416 9.624a.75.75 0 0 1-.832-1.248l9-6Z"/>
+                                <path fill-rule="evenodd" d="M20.25 10.332v9.918H21a.75.75 0 0 1 0 1.5H3a.75.75 0 0 1 0-1.5h.75v-9.918a.75.75 0 0 1 .634-.74A49.109 49.109 0 0 1 12 9c2.59 0 5.134.202 7.616.592a.75.75 0 0 1 .634.74Zm-7.5 2.418a.75.75 0 0 0-1.5 0v6.75a.75.75 0 0 0 1.5 0v-6.75Zm3-.75a.75.75 0 0 1 .75.75v6.75a.75.75 0 0 1-1.5 0v-6.75a.75.75 0 0 1 .75-.75ZM9 12.75a.75.75 0 0 0-1.5 0v6.75a.75.75 0 0 0 1.5 0v-6.75Z" clip-rule="evenodd"/>
+                            </svg>
+                            <span id="detalle-centro">Centro de Salud</span>
+                        </div>
+                    </div>
+
+                    <!-- Details Table/List -->
+                    <div class="bg-slate-50 rounded-2xl border border-slate-100 p-5 space-y-4">
+                        <!-- Cedula -->
+                        <div class="flex items-center justify-between border-b border-slate-100 pb-2.5">
+                            <span class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Cédula</span>
+                            <span id="detalle-cedula" class="text-sm font-bold text-slate-700">No especificada</span>
+                        </div>
+                        <!-- Edad -->
+                        <div class="flex items-center justify-between border-b border-slate-100 pb-2.5">
+                            <span class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Edad</span>
+                            <span id="detalle-edad" class="text-sm font-semibold text-slate-700">No especificada</span>
+                        </div>
+                        <!-- Sector / Ciudad -->
+                        <div class="flex items-center justify-between border-b border-slate-100 pb-2.5">
+                            <span class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Sector / Ciudad</span>
+                            <span id="detalle-sector" class="text-sm font-semibold text-slate-700">No especificado</span>
+                        </div>
+                        <!-- Quién registra -->
+                        <div class="flex items-center justify-between border-b border-slate-100 pb-2.5">
+                            <span class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Quién Registra</span>
+                            <span id="detalle-quien" class="text-sm font-semibold text-slate-700">Particular</span>
+                        </div>
+                        <!-- Teléfono de contacto -->
+                        <div class="flex items-center justify-between">
+                            <span class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Teléfono de contacto</span>
+                            <a id="detalle-telefono" href="#" class="text-sm font-bold text-blue-600 hover:text-blue-700 transition-colors hover:underline flex items-center gap-1">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M2.25 6.75c0 8.284 6.716 15 15 15h2.25a2.25 2.25 0 0 0 2.25-2.25v-1.372c0-.516-.351-.966-.852-1.091l-4.423-1.106c-.44-.11-.902.055-1.173.417l-.97 1.293c-.282.376-.769.542-1.21.38a12.035 12.035 0 0 1-7.143-7.143c-.162-.441.004-.928.38-1.21l1.293-.97c.363-.271.527-.734.417-1.173L6.963 3.102a1.125 1.125 0 0 0-1.091-.852H4.5A2.25 2.25 0 0 0 2.25 4.5v2.25Z"/></svg>
+                                <span>-</span>
+                            </a>
+                        </div>
+                    </div>
+
+                    <!-- Close Button -->
+                    <button onclick="closeDetalleModal()"
+                            class="mt-6 w-full py-3.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-2xl transition-all duration-200 active:scale-[0.98]">
+                        Cerrar Detalle
+                    </button>
+
+                </div>
+
+            </div>
+        </div>
+    </div>
+
+    <!-- ════════════════════════════════════════════════════════════════════
+         TRANSFER CONFIRMATION MODAL
+         ════════════════════════════════════════════════════════════════════ -->
+    <div id="transfer-modal-overlay" class="hidden fixed inset-0 z-[60] bg-slate-900/60 backdrop-blur-sm overflow-y-auto flex items-center justify-center">
+        <div id="transfer-modal-content" class="bg-white rounded-3xl shadow-2xl w-full max-w-md p-6 transform scale-95 opacity-0 transition-all duration-300">
+            <div class="w-16 h-16 bg-amber-100 text-amber-500 rounded-full flex items-center justify-center mx-auto mb-4">
+                <svg class="w-8 h-8" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
+            </div>
+            <h3 class="text-xl font-bold text-center text-slate-800 mb-2">Paciente ya registrado</h3>
+            <p class="text-slate-500 text-center text-sm mb-6">
+                Este paciente ya se encuentra registrado en <strong id="transfer-old-center" class="text-slate-700"></strong>. <br/><br/>
+                ¿Deseas trasladar al paciente a <strong id="transfer-new-center" class="text-emerald-600"></strong>?
+            </p>
+            <div class="flex items-center gap-3">
+                <button id="btn-cancel-transfer" class="flex-1 py-2.5 rounded-xl border border-slate-200 text-slate-600 font-semibold hover:bg-slate-50 transition-colors">Cancelar</button>
+                <button id="btn-confirm-transfer" class="flex-1 py-2.5 rounded-xl bg-amber-500 text-white font-semibold hover:bg-amber-600 shadow-lg shadow-amber-500/30 transition-all active:scale-95">Sí, trasladar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ════════════════════════════════════════════════════════════════════
+         TOAST CONTAINER
+         ════════════════════════════════════════════════════════════════════ -->
+    <div id="toast-container" class="fixed top-6 right-6 z-[100] flex flex-col gap-3 pointer-events-none"></div>
+
+    <!-- ════════════════════════════════════════════════════════════════════
+         FOOTER
+         ════════════════════════════════════════════════════════════════════ -->
+    <footer class="bg-slate-900 text-slate-400 py-10">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex flex-col sm:flex-row items-center justify-between gap-4">
+                <div class="flex items-center gap-2">
+                    <div class="w-8 h-8 bg-slate-800 rounded-lg flex items-center justify-center">
+                        <svg class="w-4 h-4 text-emerald-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M21 8.25c0-2.485-2.099-4.5-4.688-4.5-1.935 0-3.597 1.126-4.312 2.733-.715-1.607-2.377-2.733-4.313-2.733C5.1 3.75 3 5.765 3 8.25c0 7.22 9 12 9 12s9-4.78 9-12Z"/></svg>
+                    </div>
+                    <span class="text-sm font-medium text-slate-300">HospitalesFalcon</span>
+                </div>
+                <p class="text-xs text-center sm:text-right max-w-md leading-relaxed">
+                    Plataforma solidaria sin fines de lucro. Los datos se usan exclusivamente para ayudar a localizar familiares en centros de salud del Estado Falcón.
+                </p>
+            </div>
+            <div class="mt-6 pt-6 border-t border-slate-800 text-center">
+                <p class="text-xs text-slate-500">&copy; {{ "now"|default("2026") }} HospitalesFalcon — Hecho con ❤️ para el Estado Falcón</p>
+            </div>
+        </div>
+    </footer>
+
+    <!-- ════════════════════════════════════════════════════════════════════
+         SCRIPTS
+         ════════════════════════════════════════════════════════════════════ -->
+    <!-- Leaflet JS -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+            integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+            crossorigin=""></script>
+
+    <script>
+    /* ── State ── */
+    let map = null;
+    let markers = [];
+    let centrosSalud = [];
+    let selectedMarker = null;
+    let debounceTimer = null;
+    let activeRegistros = {{ registros_json | safe if registros_json else '[]' }};
+    let currentPage = 1;
+    const pageSize = 20;
+
+    /* ══════════════════════════════════════════════════════════
+       MODAL
+       ══════════════════════════════════════════════════════════ */
+    function openModal() {
+        const overlay = document.getElementById('modal-overlay');
+        overlay.classList.remove('hidden');
+        document.body.style.overflow = 'hidden';
+
+        // Initialize map after modal is visible
+        setTimeout(() => {
+            if (!map) {
+                initMap();
+            } else {
+                map.invalidateSize();
+            }
+        }, 150);
+    }
+
+    function closeModal() {
+        const overlay = document.getElementById('modal-overlay');
+        const content = document.getElementById('modal-content');
+        content.style.animation = 'fadeIn 0.2s ease-in reverse';
+        setTimeout(() => {
+            overlay.classList.add('hidden');
+            content.style.animation = '';
+            document.body.style.overflow = '';
+        }, 180);
+    }
+
+    // Close on Escape key
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') {
+            closeModal();
+            closeDetalleModal();
+        }
+    });
+
+    /* ══════════════════════════════════════════════════════════
+       MAP INITIALIZATION
+       ══════════════════════════════════════════════════════════ */
+    function initMap() {
+        // Center on Falcón
+        map = L.map('map-registro', {
+            zoomControl: true,
+            scrollWheelZoom: true,
+        }).setView([11.4045, -69.6734], 8);
+
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a>',
+            maxZoom: 18,
+        }).addTo(map);
+
+        // Load health centers
+        loadCentrosSalud().then(() => {
+            loadOSMCentrosSalud();
+        });
+
+        // Try geolocation
+        if (navigator.geolocation) {
+            navigator.geolocation.getCurrentPosition(
+                (pos) => {
+                    const { latitude, longitude } = pos.coords;
+                    map.setView([latitude, longitude], 12);
+
+                    // Add user location marker
+                    const userIcon = L.divIcon({
+                        html: `<div style="width:16px;height:16px;background:#3b82f6;border:3px solid white;border-radius:50%;box-shadow:0 0 0 3px rgba(59,130,246,0.3), 0 2px 6px rgba(0,0,0,0.3);"></div>`,
+                        className: '',
+                        iconSize: [16, 16],
+                        iconAnchor: [8, 8],
+                    });
+                    L.marker([latitude, longitude], { icon: userIcon })
+                        .addTo(map)
+                        .bindPopup('<b class="text-blue-600">📍 Tu ubicación</b>');
+                },
+                () => { /* Geolocation denied — keep default Venezuela view */ },
+                { enableHighAccuracy: false, timeout: 8000 }
+            );
+        }
+    }
+
+    function loadCentrosSalud() {
+        return fetch('/api/centros-salud')
+            .then(r => r.json())
+            .then(data => {
+                centrosSalud = data;
+                
+                // Populate Select Dropdown
+                const select = document.getElementById('health_center_id');
+                select.innerHTML = '<option value="">Seleccione un centro de salud...</option>';
+                
+                const dbGroup = document.createElement('optgroup');
+                dbGroup.id = 'db_group';
+                dbGroup.label = 'Centros de Salud Registrados';
+                select.appendChild(dbGroup);
+                
+                data.forEach(centro => {
+                    const icon = L.divIcon({
+                        html: `<div class="hospital-marker" style="width:14px;height:14px;"></div>`,
+                        className: '',
+                        iconSize: [14, 14],
+                        iconAnchor: [7, 7],
+                    });
+
+                    const marker = L.marker([centro.latitud || 11.4, centro.longitud || -69.6], { icon })
+                        .addTo(map)
+                        .bindPopup(`
+                            <div style="min-width:180px;">
+                                <p style="font-weight:700;font-size:13px;margin:0 0 4px 0;color:#1e293b;">🏥 ${centro.nombre}</p>
+                                <p style="font-size:11px;color:#64748b;margin:0;">📍 ${centro.tipo}</p>
+                                <button onclick="selectCentro(${centro.id})"
+                                        style="margin-top:8px;width:100%;background:#059669;color:white;border:none;padding:6px 12px;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;">
+                                    ✓ Seleccionar este centro
+                                </button>
+                            </div>
+                        `);
+
+                    markers.push({ marker, data: centro });
+                    
+                    // Add to dropdown
+                    const option = document.createElement('option');
+                    option.value = centro.id;
+                    option.textContent = `${centro.nombre} (${centro.tipo})`;
+                    dbGroup.appendChild(option);
+                });
+            })
+            .catch(err => console.warn('Error cargando centros de salud:', err));
+    }
+
+    function loadOSMCentrosSalud() {
+        const overpassQuery = `
+            [out:json][timeout:25];
+            area["name"="Falcón"]["admin_level"="4"]->.searchArea;
+            (
+              node["amenity"~"hospital|clinic|doctors"](area.searchArea);
+              node["healthcare"~"centre"](area.searchArea);
+            );
+            out body;
+        `;
+        const url = 'https://overpass-api.de/api/interpreter?data=' + encodeURIComponent(overpassQuery);
+        
+        fetch(url)
+            .then(res => res.json())
+            .then(data => {
+                const select = document.getElementById('health_center_id');
+                let osmGroup = document.getElementById('osm_group');
+
+                data.elements.forEach(el => {
+                    if (el.tags && el.tags.name) {
+                        const name = el.tags.name;
+                        // Avoid duplicates
+                        const isAlreadyInDB = centrosSalud.some(c => c.nombre.toLowerCase().trim() === name.toLowerCase().trim());
+                        if (isAlreadyInDB) {
+                            return;
+                        }
+
+                        const icon = L.divIcon({
+                            html: `<div class="hospital-marker" style="width:14px;height:14px;background:#3b82f6;border-color:#1e3a8a;"></div>`,
+                            className: '',
+                            iconSize: [14, 14],
+                            iconAnchor: [7, 7],
+                        });
+                        
+                        let tipo = 'Ambulatorio';
+                        if (el.tags.amenity === 'hospital') tipo = 'Hospital';
+                        if (el.tags.amenity === 'clinic') tipo = 'Clínica';
+
+                        const marker = L.marker([el.lat, el.lon], { icon })
+                            .addTo(map)
+                            .bindPopup(`
+                                <div style="min-width:180px;">
+                                    <p style="font-weight:700;font-size:13px;margin:0 0 4px 0;color:#1e293b;">🌐 ${name}</p>
+                                    <p style="font-size:11px;color:#64748b;margin:0;">📍 ${tipo} (OSM)</p>
+                                    <button onclick="selectOSMCentro('${name.replace(/'/g, "\\'")}', '${tipo}')"
+                                            style="margin-top:8px;width:100%;background:#3b82f6;color:white;border:none;padding:6px 12px;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;">
+                                        ✓ Seleccionar (Nuevo)
+                                    </button>
+                                </div>
+                            `);
+
+                        if (!osmGroup) {
+                            osmGroup = document.createElement('optgroup');
+                            osmGroup.id = 'osm_group';
+                            osmGroup.label = 'Centros del Mapa (OSM - No Registrados)';
+                            select.appendChild(osmGroup);
+                        }
+
+                        // Add to dropdown
+                        const option = document.createElement('option');
+                        option.value = `osm:${name}|${tipo}`;
+                        option.textContent = `${name} (${tipo})`;
+                        osmGroup.appendChild(option);
+                    }
+                });
+            })
+            .catch(err => console.warn('Error cargando centros de OSM:', err));
+    }
+
+    function selectOSMCentro(nombre, tipo) {
+        const toggle = document.getElementById('toggle_nuevo_centro');
+        if (!toggle.checked) {
+            toggle.click();
+        }
+        document.getElementById('nuevo_centro_nombre').value = nombre;
+        document.getElementById('nuevo_centro_tipo').value = tipo;
+        
+        const select = document.getElementById('health_center_id');
+        select.value = "";
+        
+        map.closePopup();
+        showToast('Centro OSM seleccionado como nuevo registro', 'info');
+    }
+
+    // Handle manual selection from dropdown list
+    document.getElementById('health_center_id').addEventListener('change', function(e) {
+        const val = e.target.value;
+        if (val && val.startsWith('osm:')) {
+            const parts = val.substring(4).split('|');
+            const nombre = parts[0];
+            const tipo = parts[1] || 'Ambulatorio';
+            selectOSMCentro(nombre, tipo);
+        } else if (val) {
+            const id = parseInt(val);
+            selectCentro(id);
+        }
+    });
+
+    function toggleNuevoCentro(checkbox) {
+        const fields = document.getElementById('nuevo_centro_fields');
+        const select = document.getElementById('health_center_id');
+        if (checkbox.checked) {
+            fields.classList.remove('hidden');
+            select.removeAttribute('required');
+            select.value = "";
+            document.getElementById('nuevo_centro_nombre').setAttribute('required', 'true');
+            document.getElementById('nuevo_centro_tipo').setAttribute('required', 'true');
+        } else {
+            fields.classList.add('hidden');
+            select.setAttribute('required', 'true');
+            document.getElementById('nuevo_centro_nombre').removeAttribute('required');
+            document.getElementById('nuevo_centro_tipo').removeAttribute('required');
+        }
+    }
+
+    function selectCentro(id) {
+        const select = document.getElementById('health_center_id');
+        select.value = id;
+        
+        // Disable new center toggle if active
+        const toggle = document.getElementById('toggle_nuevo_centro');
+        if(toggle.checked) {
+            toggle.click();
+        }
+
+        // Highlight selected marker
+        if (selectedMarker) {
+            selectedMarker.getElement()?.querySelector('.hospital-marker')?.classList.remove('hospital-marker-selected');
+        }
+
+        const found = markers.find(m => m.data.id === id);
+        if (found) {
+            selectedMarker = found.marker;
+            found.marker.getElement()?.querySelector('.hospital-marker')?.classList.add('hospital-marker-selected');
+        }
+
+        // Flash the select
+        select.classList.add('ring-2', 'ring-emerald-500');
+        setTimeout(() => select.classList.remove('ring-2', 'ring-emerald-500'), 1500);
+
+        map.closePopup();
+        showToast('Centro de salud seleccionado', 'success');
+    }
+
+    /* ══════════════════════════════════════════════════════════
+       PHOTO PREVIEW
+       ══════════════════════════════════════════════════════════ */
+    function previewPhoto(input) {
+        const file = input.files[0];
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            document.getElementById('preview-img').src = e.target.result;
+            document.getElementById('preview-name').textContent = file.name;
+            document.getElementById('upload-placeholder').classList.add('hidden');
+            document.getElementById('upload-preview').classList.remove('hidden');
+        };
+        reader.readAsDataURL(file);
+    }
+
+    function clearPhoto() {
+        document.getElementById('foto').value = '';
+        document.getElementById('upload-placeholder').classList.remove('hidden');
+        document.getElementById('upload-preview').classList.add('hidden');
+    }
+
+    /* ══════════════════════════════════════════════════════════
+       FORM SUBMISSION
+       ══════════════════════════════════════════════════════════ */
+    document.getElementById('form-registro').addEventListener('submit', async function(e) {
+        e.preventDefault();
+
+        const btn = document.getElementById('btn-submit');
+        const originalHTML = btn.innerHTML;
+
+        // Validate required fields
+        const nombre = document.getElementById('nombre_apellido').value.trim();
+        const sector = document.getElementById('sector_ciudad').value.trim();
+        
+        const health_center_id = document.getElementById('health_center_id').value;
+        const toggle_nuevo = document.getElementById('toggle_nuevo_centro').checked;
+        const nuevo_centro_nombre = document.getElementById('nuevo_centro_nombre').value.trim();
+        const nuevo_centro_tipo = document.getElementById('nuevo_centro_tipo').value;
+
+        const quien = document.getElementById('quien_registra').value;
+        const telefono = document.getElementById('telefono_contacto').value.trim();
+
+        // Validate inputs using tooltip validation
+        const inputsToValidate = [
+            document.getElementById('nombre_apellido'),
+            document.getElementById('cedula'),
+            document.getElementById('edad'),
+            document.getElementById('sector_ciudad'),
+            document.getElementById('telefono_contacto')
+        ];
+        
+        if (toggle_nuevo) {
+            inputsToValidate.push(document.getElementById('nuevo_centro_nombre'));
+        }
+
+        let isFormValid = true;
+        inputsToValidate.forEach(input => {
+            if (!validateInput(input)) {
+                isFormValid = false;
+            }
+        });
+
+        if (!isFormValid) {
+            showToast('Por favor, corrija los campos marcados en rojo.', 'error');
+            return;
+        }
+
+        if (!quien) {
+            showToast('Por favor, seleccione quién realiza el registro.', 'error');
+            return;
+        }
+        
+        if (!health_center_id && !toggle_nuevo) {
+            showToast('Debe seleccionar un centro de salud.', 'error');
+            return;
+        }
+        if (toggle_nuevo && (!nuevo_centro_nombre || !nuevo_centro_tipo)) {
+            showToast('Debe completar el nombre y tipo del nuevo centro.', 'error');
+            return;
+        }
+
+        // Build FormData
+        const formData = new FormData();
+        formData.append('nombre_apellido', nombre);
+        formData.append('sector_ciudad', sector);
+        if(health_center_id) formData.append('health_center_id', health_center_id);
+        if(toggle_nuevo) {
+            formData.append('nuevo_centro_nombre', nuevo_centro_nombre);
+            formData.append('nuevo_centro_tipo', nuevo_centro_tipo);
+        }
+        formData.append('quien_registra', quien);
+        formData.append('telefono_contacto', telefono);
+        formData.append('cedula', document.getElementById('cedula').value.trim());
+        formData.append('edad', document.getElementById('edad').value);
+        formData.append('trabaja_centro', document.getElementById('trabaja_centro').checked ? 'true' : 'false');
+
+        const fotoInput = document.getElementById('foto');
+        if (fotoInput.files.length > 0) {
+            formData.append('foto', fotoInput.files[0]);
+        }
+
+        // Loading state
+        btn.disabled = true;
+        btn.innerHTML = `
+            <svg class="w-5 h-5 animate-spin" fill="none" viewBox="0 0 24 24">
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+            </svg>
+            Registrando…
+        `;
+
+        const sendData = async (isTransfer = false) => {
+            if (isTransfer) {
+                formData.append('force_transfer', 'true');
+            }
+            try {
+                const resp = await fetch('/api/registrar', { method: 'POST', body: formData });
+                const data = await resp.json();
+
+                if (resp.ok && data.success) {
+                    showToast(data.message || '¡Persona registrada exitosamente!', 'success');
+                    closeModal();
+                    document.getElementById('form-registro').reset();
+                    clearPhoto();
+                    document.getElementById('latitud').value = '';
+                    document.getElementById('longitud').value = '';
+                    setTimeout(() => window.location.reload(), 800);
+                } else if (data.requires_transfer) {
+                    // Show custom modal using a Promise
+                    const conf = await new Promise((resolve) => {
+                        const overlay = document.getElementById('transfer-modal-overlay');
+                        const content = document.getElementById('transfer-modal-content');
+                        
+                        document.getElementById('transfer-old-center').textContent = data.existing_center;
+                        document.getElementById('transfer-new-center').textContent = data.new_center;
+                        
+                        overlay.classList.remove('hidden');
+                        setTimeout(() => {
+                            content.classList.remove('scale-95', 'opacity-0');
+                            content.classList.add('scale-100', 'opacity-100');
+                        }, 10);
+
+                        const closeTransferModal = (result) => {
+                            content.classList.remove('scale-100', 'opacity-100');
+                            content.classList.add('scale-95', 'opacity-0');
+                            setTimeout(() => {
+                                overlay.classList.add('hidden');
+                                resolve(result);
+                            }, 300);
+                        };
+
+                        document.getElementById('btn-confirm-transfer').onclick = () => closeTransferModal(true);
+                        document.getElementById('btn-cancel-transfer').onclick = () => closeTransferModal(false);
+                    });
+
+                    if (conf) {
+                        // Attempt again with force_transfer
+                        await sendData(true);
+                    } else {
+                        btn.disabled = false;
+                        btn.innerHTML = originalHTML;
+                    }
+                } else {
+                    showToast(data.error || 'Error al registrar.', 'error');
+                    btn.disabled = false;
+                    btn.innerHTML = originalHTML;
+                }
+            } catch (err) {
+                showToast('Error de conexión. Intente de nuevo.', 'error');
+                btn.disabled = false;
+                btn.innerHTML = originalHTML;
+            }
+        };
+
+        await sendData();
+    });
+
+    /* ══════════════════════════════════════════════════════════
+       SEARCH (with debounce)
+       ══════════════════════════════════════════════════════════ */
+    const searchInput = document.getElementById('search-input');
+    const searchFilter = document.getElementById('search-filter');
+
+    searchInput.addEventListener('input', () => {
+        clearTimeout(debounceTimer);
+        debounceTimer = setTimeout(performSearch, 300);
+    });
+
+    searchFilter.addEventListener('change', performSearch);
+
+    async function performSearch() {
+        const q = searchInput.value.trim();
+        const filter = searchFilter.value;
+
+        const grid = document.getElementById('results-grid');
+        const skeleton = document.getElementById('loading-skeleton');
+        const empty = document.getElementById('empty-state');
+
+        // Show skeleton
+        grid.classList.add('hidden');
+        empty.classList.add('hidden');
+        skeleton.classList.remove('hidden');
+
+        try {
+            const resp = await fetch(`/api/search?q=${encodeURIComponent(q)}&filter=${filter}`);
+            const data = await resp.json();
+
+            skeleton.classList.add('hidden');
+
+            if (data.registros.length === 0) {
+                grid.classList.add('hidden');
+                empty.classList.remove('hidden');
+                document.getElementById('results-count').textContent = 'No se encontraron registros';
+                document.getElementById('pagination-container')?.classList.add('hidden');
+            } else {
+                empty.classList.add('hidden');
+                grid.classList.remove('hidden');
+                document.getElementById('results-count').textContent = `Mostrando ${data.total} registro${data.total !== 1 ? 's' : ''}`;
+                activeRegistros = data.registros;
+                renderPage(1);
+            }
+        } catch (err) {
+            skeleton.classList.add('hidden');
+            grid.classList.remove('hidden');
+            showToast('Error al buscar. Intente de nuevo.', 'error');
+        }
+     }
+
+     function renderPage(page) {
+         currentPage = page;
+         const grid = document.getElementById('results-grid');
+         const paginationContainer = document.getElementById('pagination-container');
+         
+         if (!activeRegistros || activeRegistros.length === 0) {
+             grid.innerHTML = '';
+             if (paginationContainer) paginationContainer.classList.add('hidden');
+             return;
+         }
+
+         const start = (page - 1) * pageSize;
+         const end = Math.min(start + pageSize, activeRegistros.length);
+         const pageData = activeRegistros.slice(start, end);
+
+         renderCards(pageData);
+         updatePaginationControls(activeRegistros.length, page);
+     }
+
+     function changePage(page) {
+         renderPage(page);
+         const target = document.getElementById('search-input') || document.getElementById('results-grid');
+         if (target) {
+             target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+         }
+     }
+
+     function updatePaginationControls(totalItems, page) {
+         const paginationContainer = document.getElementById('pagination-container');
+         if (!paginationContainer) return;
+
+         const totalPages = Math.ceil(totalItems / pageSize);
+
+         if (totalPages <= 1) {
+             paginationContainer.classList.add('hidden');
+             return;
+         }
+         paginationContainer.classList.remove('hidden');
+
+         const start = (page - 1) * pageSize + 1;
+         const end = Math.min(page * pageSize, totalItems);
+         const info = document.getElementById('pagination-info');
+         if (info) {
+             info.textContent = `Mostrando ${start} - ${end} de ${totalItems} registro${totalItems !== 1 ? 's' : ''}`;
+         }
+
+         const buttonsContainer = document.getElementById('pagination-buttons');
+         if (!buttonsContainer) return;
+
+         let buttonsHTML = '';
+
+         // Anterior button
+         const prevDisabled = page === 1 ? 'pointer-events-none opacity-50' : '';
+         buttonsHTML += `
+             <button onclick="changePage(${page - 1})" ${page === 1 ? 'disabled' : ''} 
+                     class="px-3 py-1.5 text-xs font-semibold rounded-xl border border-slate-200 bg-white text-slate-600 hover:bg-slate-100 transition-all active:scale-95 flex items-center gap-1 ${prevDisabled}">
+                 <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                     <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 19.5 8.25 12l7.5-7.5" />
+                 </svg>
+                 Anterior
+             </button>
+         `;
+
+         // Page numbers
+         const range = 1;
+         for (let i = 1; i <= totalPages; i++) {
+             if (i === 1 || i === totalPages || (i >= page - range && i <= page + range)) {
+                 const activeClass = i === page 
+                     ? 'bg-blue-600 text-white border-blue-600 shadow-md shadow-blue-500/20' 
+                     : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-100';
+                 buttonsHTML += `
+                     <button onclick="changePage(${i})" 
+                             class="w-8 h-8 flex items-center justify-center text-xs font-bold rounded-xl transition-all duration-200 active:scale-95 ${activeClass}">
+                         ${i}
+                     </button>
+                 `;
+             } else if (i === page - range - 1 || i === page + range + 1) {
+                 buttonsHTML += `
+                     <span class="px-1 text-slate-400 font-bold select-none">...</span>
+                 `;
+             }
+         }
+
+         // Siguiente button
+         const nextDisabled = page === totalPages ? 'pointer-events-none opacity-50' : '';
+         buttonsHTML += `
+             <button onclick="changePage(${page + 1})" ${page === totalPages ? 'disabled' : ''} 
+                     class="px-3 py-1.5 text-xs font-semibold rounded-xl border border-slate-200 bg-white text-slate-600 hover:bg-slate-100 transition-all active:scale-95 flex items-center gap-1 ${nextDisabled}">
+                 Siguiente
+                 <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                     <path stroke-linecap="round" stroke-linejoin="round" d="m8.25 4.5 7.5 7.5-7.5 7.5" />
+                 </svg>
+             </button>
+         `;
+
+         buttonsContainer.innerHTML = buttonsHTML;
+     }
+
+     function renderCards(registros) {
+        const grid = document.getElementById('results-grid');
+        grid.innerHTML = registros.map(r => {
+            const initial = r.nombre_apellido.charAt(0).toUpperCase();
+            const photo = r.foto_path
+                ? `<img src="/static/uploads/${r.foto_path}" alt="Foto" class="w-16 h-16 rounded-xl object-cover border-2 border-slate-100 shadow-sm">`
+                : `<div class="w-16 h-16 rounded-xl bg-gradient-to-br from-blue-500 to-emerald-500 flex items-center justify-center shadow-sm">
+                       <span class="text-white font-bold text-xl">${initial}</span>
+                   </div>`;
+
+            const cedulaHTML = r.cedula
+                ? `<span class="flex items-center gap-1">
+                       <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15 9h3.75M15 12h3.75M15 15h3.75M4.5 19.5h15a2.25 2.25 0 0 0 2.25-2.25V6.75A2.25 2.25 0 0 0 19.5 4.5h-15a2.25 2.25 0 0 0-2.25 2.25v10.5A2.25 2.25 0 0 0 4.5 19.5Zm6-10.125a1.875 1.875 0 1 1-3.75 0 1.875 1.875 0 0 1 3.75 0Zm1.294 6.336a6.721 6.721 0 0 1-3.17.789 6.721 6.721 0 0 1-3.168-.789 3.376 3.376 0 0 1 6.338 0Z"/></svg>
+                       C.I. ${r.cedula}
+                   </span>` : '';
+
+            const edadHTML = r.edad ? `<span>${r.edad} años</span>` : '';
+
+            let badgeClass, badgeIcon;
+            if (r.quien_registra === 'Familiar') {
+                badgeClass = 'bg-blue-50 text-blue-700';
+                badgeIcon = '👨‍👩‍👧';
+            } else if (r.quien_registra === 'Yo mismo') {
+                badgeClass = 'bg-amber-50 text-amber-700';
+                badgeIcon = '🙋';
+            } else {
+                badgeClass = 'bg-purple-50 text-purple-700';
+                badgeIcon = '🤝';
+            }
+
+            return `
+            <article onclick="openDetalleById(${r.id})" class="card-hover cursor-pointer bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden animate-fade-in">
+                <div class="flex items-start gap-4 p-5">
+                    <div class="flex-shrink-0">${photo}</div>
+                    <div class="flex-1 min-w-0">
+                        <h3 class="font-bold text-slate-800 text-base truncate">${r.nombre_apellido}</h3>
+                        <div class="flex items-center gap-1.5 mt-1">
+                            <svg class="w-3.5 h-3.5 text-emerald-500 flex-shrink-0" fill="currentColor" viewBox="0 0 24 24">
+                                <path d="M11.584 2.376a.75.75 0 0 1 .832 0l9 6a.75.75 0 1 1-.832 1.248L12 3.901 3.416 9.624a.75.75 0 0 1-.832-1.248l9-6Z"/>
+                                <path fill-rule="evenodd" d="M20.25 10.332v9.918H21a.75.75 0 0 1 0 1.5H3a.75.75 0 0 1 0-1.5h.75v-9.918a.75.75 0 0 1 .634-.74A49.109 49.109 0 0 1 12 9c2.59 0 5.134.202 7.616.592a.75.75 0 0 1 .634.74Zm-7.5 2.418a.75.75 0 0 0-1.5 0v6.75a.75.75 0 0 0 1.5 0v-6.75Zm3-.75a.75.75 0 0 1 .75.75v6.75a.75.75 0 0 1-1.5 0v-6.75a.75.75 0 0 1 .75-.75ZM9 12.75a.75.75 0 0 0-1.5 0v6.75a.75.75 0 0 0 1.5 0v-6.75Z" clip-rule="evenodd"/>
+                            </svg>
+                            <span class="text-sm text-emerald-700 font-medium truncate">${r.centro_salud}</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="border-t border-slate-50 bg-slate-50/50 px-5 py-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-500">
+                    <span class="flex items-center gap-1">
+                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15 10.5a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z"/><path stroke-linecap="round" stroke-linejoin="round" d="M19.5 10.5c0 7.142-7.5 11.25-7.5 11.25S4.5 17.642 4.5 10.5a7.5 7.5 0 1 1 15 0Z"/></svg>
+                        ${r.sector_ciudad}
+                    </span>
+                    ${cedulaHTML}
+                    ${edadHTML}
+                    <span class="flex items-center gap-1 ml-auto text-slate-400">
+                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z"/></svg>
+                        ${r.fecha_registro}
+                    </span>
+                </div>
+                <div class="px-5 py-3 border-t border-slate-50 flex items-center justify-between">
+                    <span class="inline-flex items-center gap-1 text-xs font-medium px-2.5 py-1 rounded-full ${badgeClass}">
+                        ${badgeIcon} ${r.quien_registra}
+                    </span>
+                    <span class="text-xs text-slate-400 font-mono tracking-wide">${r.telefono_contacto}</span>
+                </div>
+                ${r.observaciones ? `<div class="px-5 py-2 border-t border-amber-100 bg-amber-50 text-amber-800 text-xs rounded-b-2xl">
+                    <strong>Historial:</strong><br/>
+                    ${r.observaciones.replace(/\\n/g, '<br/>')}
+                </div>` : ''}
+            </article>`;
+        }).join('');
+    }
+
+    /* ══════════════════════════════════════════════════════════
+       TOAST NOTIFICATIONS
+       ══════════════════════════════════════════════════════════ */
+    function showToast(message, type = 'info') {
+        const container = document.getElementById('toast-container');
+
+        const colors = {
+            success: 'bg-emerald-500',
+            error:   'bg-red-500',
+            info:    'bg-blue-500',
+        };
+        const icons = {
+            success: `<svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="m4.5 12.75 6 6 9-13.5"/></svg>`,
+            error:   `<svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126ZM12 15.75h.007v.008H12v-.008Z"/></svg>`,
+            info:    `<svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="m11.25 11.25.041-.02a.75.75 0 0 1 1.063.852l-.708 2.836a.75.75 0 0 0 1.063.853l.041-.021M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-9-3.75h.008v.008H12V8.25Z"/></svg>`,
+        };
+
+        const toast = document.createElement('div');
+        toast.className = `pointer-events-auto toast-enter flex items-center gap-3 ${colors[type] || colors.info} text-white px-5 py-3.5 rounded-xl shadow-lg min-w-[280px]`;
+        toast.innerHTML = `${icons[type] || icons.info}<span class="text-sm font-medium">${message}</span>`;
+
+        container.appendChild(toast);
+
+        setTimeout(() => {
+            toast.classList.remove('toast-enter');
+            toast.classList.add('toast-exit');
+            setTimeout(() => toast.remove(), 300);
+        }, 3500);
+    }
+
+    /* ══════════════════════════════════════════════════════════
+       DRAG & DROP for photo upload
+       ══════════════════════════════════════════════════════════ */
+    const uploadZone = document.getElementById('upload-zone');
+
+    ['dragenter', 'dragover'].forEach(evt => {
+        uploadZone.addEventListener(evt, (e) => {
+            e.preventDefault();
+            uploadZone.classList.add('drag-over');
+        });
+    });
+
+    ['dragleave', 'drop'].forEach(evt => {
+        uploadZone.addEventListener(evt, (e) => {
+            e.preventDefault();
+            uploadZone.classList.remove('drag-over');
+        });
+    });
+
+    uploadZone.addEventListener('drop', (e) => {
+        const files = e.dataTransfer.files;
+        if (files.length > 0) {
+            const fotoInput = document.getElementById('foto');
+            fotoInput.files = files;
+            previewPhoto(fotoInput);
+        }
+    });
+
+    /* ══════════════════════════════════════════════════════════
+       DETALLE MODAL ACTIONS
+       ══════════════════════════════════════════════════════════ */
+    function openDetalleById(id) {
+        const registro = activeRegistros.find(r => r.id === id);
+        if (registro) {
+            openDetalleModal(registro);
+        }
+    }
+
+    function openDetalleModal(r) {
+        const overlay = document.getElementById('modal-detalle-overlay');
+        
+        // Populate fields
+        document.getElementById('detalle-nombre').textContent = r.nombre_apellido;
+        document.getElementById('detalle-centro').textContent = r.centro_salud;
+        document.getElementById('detalle-cedula').textContent = r.cedula || 'No especificada';
+        document.getElementById('detalle-edad').textContent = r.edad ? `${r.edad} años` : 'No especificada';
+        document.getElementById('detalle-sector').textContent = r.sector_ciudad;
+        document.getElementById('detalle-quien').textContent = r.quien_registra;
+        
+        // Phone
+        const telAnchor = document.getElementById('detalle-telefono');
+        if (r.telefono_contacto) {
+            telAnchor.href = `tel:${r.telefono_contacto}`;
+            telAnchor.querySelector('span').textContent = r.telefono_contacto;
+            telAnchor.classList.remove('pointer-events-none', 'text-slate-400');
+            telAnchor.classList.add('text-blue-600');
+        } else {
+            telAnchor.href = '#';
+            telAnchor.querySelector('span').textContent = 'No especificado';
+            telAnchor.classList.add('pointer-events-none', 'text-slate-400');
+            telAnchor.classList.remove('text-blue-600');
+        }
+
+        // Photo / Avatar
+        const fotoContainer = document.getElementById('detalle-foto-container');
+        if (r.foto_path) {
+            fotoContainer.innerHTML = `
+                <img src="/static/uploads/${r.foto_path}"
+                     alt="Foto de ${r.nombre_apellido}"
+                     class="w-32 h-32 rounded-3xl object-cover border-4 border-white shadow-lg">
+            `;
+        } else {
+            const initial = r.nombre_apellido.charAt(0).toUpperCase();
+            fotoContainer.innerHTML = `
+                <div class="w-32 h-32 rounded-3xl bg-gradient-to-br from-blue-500 to-emerald-500 flex items-center justify-center border-4 border-white shadow-lg">
+                    <span class="text-white font-extrabold text-5xl">${initial}</span>
+                </div>
+            `;
+        }
+
+        // Show modal
+        overlay.classList.remove('hidden');
+        document.body.style.overflow = 'hidden';
+    }
+
+    function closeDetalleModal() {
+        const overlay = document.getElementById('modal-detalle-overlay');
+        const content = document.getElementById('modal-detalle-content');
+        content.style.animation = 'fadeIn 0.2s ease-in reverse';
+        setTimeout(() => {
+            overlay.classList.add('hidden');
+            content.style.animation = '';
+            document.body.style.overflow = '';
+        }, 180);
+    }
+
+    // Render initial page of registrations on load
+    document.addEventListener('DOMContentLoaded', () => {
+        renderPage(1);
+
+        // Bind input and blur events for patient form validation
+        const formFields = ['nombre_apellido', 'cedula', 'edad', 'sector_ciudad', 'telefono_contacto', 'nuevo_centro_nombre'];
+        formFields.forEach(id => {
+            const input = document.getElementById(id);
+            if (input) {
+                input.addEventListener('input', () => validateInput(input));
+                input.addEventListener('blur', () => validateInput(input));
+            }
+        });
+    });
+
+    function showTooltip(input, message) {
+        let tooltip = document.getElementById(`tooltip-${input.id}`);
+        if (!tooltip) {
+            tooltip = document.createElement('div');
+            tooltip.id = `tooltip-${input.id}`;
+            tooltip.className = 'validation-tooltip';
+            const arrow = document.createElement('div');
+            arrow.className = 'validation-tooltip-arrow';
+            tooltip.appendChild(arrow);
+            const text = document.createElement('span');
+            text.id = `tooltip-text-${input.id}`;
+            tooltip.appendChild(text);
+            document.body.appendChild(tooltip);
+        }
+        
+        document.getElementById(`tooltip-text-${input.id}`).textContent = message;
+        
+        const rect = input.getBoundingClientRect();
+        const scrollLeft = window.pageXOffset || document.documentElement.scrollLeft;
+        const scrollTop = window.pageYOffset || document.documentElement.scrollTop;
+        
+        tooltip.style.left = `${rect.left + scrollLeft}px`;
+        tooltip.style.top = `${rect.bottom + scrollTop + 6}px`;
+        tooltip.style.width = `${Math.max(rect.width, 200)}px`;
+        
+        tooltip.classList.add('visible');
+        input.classList.add('border-red-500', 'ring-2', 'ring-red-200');
+    }
+
+    function hideTooltip(input) {
+        const tooltip = document.getElementById(`tooltip-${input.id}`);
+        if (tooltip) {
+            tooltip.classList.remove('visible');
+            setTimeout(() => {
+                if (!tooltip.classList.contains('visible')) {
+                    tooltip.remove();
+                }
+            }, 200);
+        }
+        input.classList.remove('border-red-500', 'ring-2', 'ring-red-200');
+    }
+
+    function validateInput(input) {
+        const val = input.value.trim();
+        
+        if (input.id === 'nombre_apellido') {
+            if (!val) {
+                showTooltip(input, 'Este campo es obligatorio.');
+                return false;
+            }
+            if (val.length < 2 || val.length > 20) {
+                showTooltip(input, 'El nombre debe tener entre 2 y 20 caracteres.');
+                return false;
+            }
+            if (!/^[a-zA-ZáéíóúÁÉÍÓÚñÑ\s]+$/.test(val)) {
+                showTooltip(input, 'El nombre debe contener únicamente letras y espacios.');
+                return false;
+            }
+        }
+        
+        if (input.id === 'cedula') {
+            if (!val) {
+                hideTooltip(input);
+                return true;
+            }
+            const clean = val.replace(/\D/g, '');
+            if (clean.length < 7 || clean.length > 8) {
+                showTooltip(input, 'La cédula debe tener entre 7 y 8 dígitos numéricos.');
+                return false;
+            }
+            if (/[^\d]/.test(val.replace(/^V-|^E-/i, ''))) {
+                showTooltip(input, 'La cédula debe contener únicamente números.');
+                return false;
+            }
+        }
+        
+        if (input.id === 'edad') {
+            if (!val) {
+                hideTooltip(input);
+                return true;
+            }
+            const edad = parseInt(val);
+            if (isNaN(edad) || edad < 1 || edad > 99) {
+                showTooltip(input, 'La edad debe ser un número entero entre 1 y 99.');
+                return false;
+            }
+        }
+        
+        if (input.id === 'telefono_contacto') {
+            if (!val) {
+                showTooltip(input, 'Este campo es obligatorio.');
+                return false;
+            }
+            const clean = val.replace(/\D/g, '');
+            if (clean.length < 12) {
+                showTooltip(input, 'El teléfono debe contener al menos 12 dígitos numéricos.');
+                return false;
+            }
+        }
+        
+        if (input.id === 'nuevo_centro_nombre') {
+            if (document.getElementById('toggle_nuevo_centro') && !document.getElementById('toggle_nuevo_centro').checked) {
+                hideTooltip(input);
+                return true;
+            }
+            if (!val) {
+                showTooltip(input, 'Este campo es obligatorio.');
+                return false;
+            }
+            if (val.length < 8 || val.length > 50) {
+                showTooltip(input, 'El centro de salud debe tener entre 8 y 50 caracteres.');
+                return false;
+            }
+            if (!/^[a-zA-ZáéíóúÁÉÍÓÚñÑ\s]+$/.test(val)) {
+                showTooltip(input, 'El nombre debe contener únicamente letras y espacios.');
+                return false;
+            }
+        }
+
+        if (input.id === 'sector_ciudad') {
+            if (!val) {
+                showTooltip(input, 'Este campo es obligatorio.');
+                return false;
+            }
+        }
+
+        hideTooltip(input);
+        return true;
+    }
+    </script>
+</body>
+</html>

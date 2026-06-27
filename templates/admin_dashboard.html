@@ -1,0 +1,748 @@
+<!DOCTYPE html>
+<html lang="es" class="scroll-smooth bg-slate-50">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Panel de Superusuario — HospitalesFalcon</title>
+    
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        'sans': ['Inter', 'system-ui', '-apple-system', 'sans-serif'],
+                    },
+                    colors: {
+                        brand: {
+                            50: '#f0fdfa',
+                            100: '#ccfbf1',
+                            500: '#14b8a6',
+                            600: '#0d9488',
+                            900: '#134e4a',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <style>
+        .glass-panel {
+            background: rgba(255, 255, 255, 0.9);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+        .gradient-text {
+            background: linear-gradient(to right, #0f766e, #0369a1);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        /* ── Validation Tooltip ── */
+        .validation-tooltip {
+            position: absolute;
+            z-index: 9999;
+            background-color: #ef4444;
+            color: #ffffff;
+            font-size: 0.75rem;
+            padding: 0.375rem 0.75rem;
+            border-radius: 0.5rem;
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+            border: 1px solid #dc2626;
+            font-weight: 500;
+            pointer-events: none;
+            transition: opacity 0.2s, transform 0.2s;
+            opacity: 0;
+            transform: translateY(4px);
+            display: none;
+        }
+        .validation-tooltip.visible {
+            display: flex;
+            opacity: 1;
+            transform: translateY(0);
+        }
+        .validation-tooltip-arrow {
+            width: 0.5rem;
+            height: 0.5rem;
+            background-color: #ef4444;
+            transform: rotate(45deg);
+            position: absolute;
+            top: -0.25rem;
+            left: 1rem;
+            border-left: 1px solid #dc2626;
+            border-top: 1px solid #dc2626;
+        }
+    </style>
+</head>
+<body class="font-sans antialiased text-slate-800 min-h-screen flex flex-col">
+
+    <!-- Header -->
+    <header class="bg-white border-b border-slate-200 sticky top-0 z-50">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+            <div class="flex items-center gap-3">
+                <div class="w-10 h-10 bg-brand-100 rounded-xl flex items-center justify-center">
+                    <svg class="w-6 h-6 text-brand-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+                    </svg>
+                </div>
+                <h1 class="text-xl font-bold gradient-text">Admin Dashboard</h1>
+            </div>
+            <div class="flex items-center gap-4">
+                <span class="text-sm font-medium text-slate-600 flex items-center gap-2">
+                    <svg class="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg>
+                    {{ current_user.nombre }}
+                </span>
+                <a href="/logout" class="text-sm text-red-600 hover:text-red-700 font-medium transition-colors">Cerrar Sesión</a>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="flex-grow max-w-7xl mx-auto w-full px-4 sm:px-6 lg:px-8 py-8">
+        
+        <div class="mb-6 border-b border-slate-200">
+            <ul class="flex flex-wrap -mb-px text-sm font-medium text-center text-slate-500">
+                <li class="mr-2">
+                    <button onclick="switchTab('staff')" id="tab-staff" class="inline-block p-4 text-brand-600 border-b-2 border-brand-600 rounded-t-lg active">Personal de Salud</button>
+                </li>
+                <li class="mr-2 relative">
+                    <button onclick="switchTab('centers')" id="tab-centers" class="inline-block p-4 border-b-2 border-transparent rounded-t-lg hover:text-slate-600 hover:border-slate-300">
+                        Solicitudes de Centros
+                        {% if unapproved_centers|length > 0 %}
+                        <span class="inline-flex items-center justify-center w-5 h-5 ml-2 text-xs font-bold text-white bg-red-500 rounded-full">
+                            {{ unapproved_centers|length }}
+                        </span>
+                        {% endif %}
+                    </button>
+                </li>
+                <li class="mr-2">
+                    <button onclick="switchTab('add-center')" id="tab-add-center" class="inline-block p-4 border-b-2 border-transparent rounded-t-lg hover:text-slate-600 hover:border-slate-300">Agregar Centro Manual</button>
+                </li>
+            </ul>
+        </div>
+
+        <!-- Tab Content: Staff -->
+        <div id="content-staff" class="glass-panel rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+            <div class="overflow-x-auto">
+                <table class="w-full text-left text-sm whitespace-nowrap">
+                    <thead class="bg-slate-50 border-b border-slate-200 text-slate-500 uppercase tracking-wider text-xs font-semibold">
+                        <tr>
+                            <th class="px-6 py-4">Usuario / Correo</th>
+                            <th class="px-6 py-4">Centro Médico</th>
+                            <th class="px-6 py-4">Fecha Registro</th>
+                            <th class="px-6 py-4">Estado</th>
+                            <th class="px-6 py-4 text-center">Carnet</th>
+                            <th class="px-6 py-4 text-right">Acciones</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-slate-100">
+                        {% for user in users %}
+                        <tr class="hover:bg-slate-50/50 transition-colors group">
+                            <td class="px-6 py-4">
+                                <div class="font-medium text-slate-900">{{ user.nombre }}</div>
+                                <div class="text-slate-500 text-xs mt-0.5">{{ user.correo }}</div>
+                            </td>
+                            <td class="px-6 py-4 text-slate-600">{{ user.centro_medico_asociado }}</td>
+                            <td class="px-6 py-4 text-slate-500 text-xs">
+                                {{ user.fecha_registro.strftime('%d/%m/%Y') if user.fecha_registro else 'N/A' }}
+                            </td>
+                            <td class="px-6 py-4">
+                                {% if user.account_status == 'approved' %}
+                                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800 border border-green-200">
+                                    Aprobado
+                                </span>
+                                {% elif user.account_status == 'restricted' %}
+                                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800 border border-red-200">
+                                    Restringido
+                                </span>
+                                {% else %}
+                                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800 border border-yellow-200">
+                                    Pendiente
+                                </span>
+                                {% endif %}
+                            </td>
+                            <td class="px-6 py-4 text-center">
+                                {% if user.id_card_path %}
+                                <a href="/admin/view_id/{{ user.id_card_path }}" target="_blank" class="inline-flex items-center justify-center p-2 rounded-lg bg-blue-50 text-blue-600 hover:bg-blue-100 transition-colors" title="Ver Carnet">
+                                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
+                                </a>
+                                {% else %}
+                                <span class="text-xs text-slate-400">Sin carnet</span>
+                                {% endif %}
+                            </td>
+                            <td class="px-6 py-4 text-right space-x-2">
+                                {% if user.account_status != 'approved' %}
+                                <button onclick="handleAction('approve', {{ user.id }})" class="inline-flex items-center px-3 py-1.5 rounded-lg bg-emerald-50 text-emerald-600 hover:bg-emerald-100 font-medium text-xs transition-colors">
+                                    Aprobar
+                                </button>
+                                {% endif %}
+                                
+                                {% if user.account_status != 'restricted' %}
+                                <button onclick="handleAction('restrict', {{ user.id }})" class="inline-flex items-center px-3 py-1.5 rounded-lg bg-orange-50 text-orange-600 hover:bg-orange-100 font-medium text-xs transition-colors">
+                                    Restringir
+                                </button>
+                                {% endif %}
+                                
+                                <button onclick="editUser({{ user.id }}, '{{ user.nombre|escape }}', '{{ user.centro_medico_asociado|escape }}')" class="inline-flex items-center px-3 py-1.5 rounded-lg bg-slate-100 text-slate-600 hover:bg-slate-200 font-medium text-xs transition-colors">
+                                    Editar
+                                </button>
+                                
+                                <button onclick="handleAction('delete', {{ user.id }})" class="inline-flex items-center px-3 py-1.5 rounded-lg bg-red-50 text-red-600 hover:bg-red-100 font-medium text-xs transition-colors">
+                                    Eliminar
+                                </button>
+                            </td>
+                        </tr>
+                        {% else %}
+                        <tr>
+                            <td colspan="6" class="px-6 py-12 text-center text-slate-500">
+                                No hay personal de salud registrado.
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Tab Content: Centers -->
+        <div id="content-centers" class="hidden glass-panel rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+            <div class="overflow-x-auto">
+                <table class="w-full text-left text-sm whitespace-nowrap">
+                    <thead class="bg-slate-50 border-b border-slate-200 text-slate-500 uppercase tracking-wider text-xs font-semibold">
+                        <tr>
+                            <th class="px-6 py-4">Nombre Sugerido</th>
+                            <th class="px-6 py-4">Tipo</th>
+                            <th class="px-6 py-4">Pacientes Asoc.</th>
+                            <th class="px-6 py-4 text-right">Acciones</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-slate-100">
+                        {% for center in unapproved_centers %}
+                        <tr class="hover:bg-slate-50/50 transition-colors group">
+                            <td class="px-6 py-4 font-medium text-slate-900">{{ center.nombre }}</td>
+                            <td class="px-6 py-4 text-slate-600">{{ center.tipo }}</td>
+                            <td class="px-6 py-4 text-slate-500 text-xs">
+                                {{ center.registros|length }}
+                            </td>
+                            <td class="px-6 py-4 text-right space-x-2">
+                                <button onclick="approveCenter({{ center.id }}, '{{ center.nombre|escape }}', '{{ center.tipo|escape }}')" class="inline-flex items-center px-3 py-1.5 rounded-lg bg-emerald-50 text-emerald-600 hover:bg-emerald-100 font-medium text-xs transition-colors">
+                                    Aprobar y Editar
+                                </button>
+                                
+                                <button onclick="rejectCenter({{ center.id }})" class="inline-flex items-center px-3 py-1.5 rounded-lg bg-red-50 text-red-600 hover:bg-red-100 font-medium text-xs transition-colors">
+                                    Rechazar / Fusionar
+                                </button>
+                            </td>
+                        </tr>
+                        {% else %}
+                        <tr>
+                            <td colspan="4" class="px-6 py-12 text-center text-slate-500">
+                                No hay solicitudes de centros pendientes.
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Tab Content: Add Center Manual -->
+        <div id="content-add-center" class="hidden glass-panel rounded-2xl shadow-sm border border-slate-200 overflow-hidden p-6">
+            <h2 class="text-xl font-semibold mb-4 text-slate-800">Cargar Centro de Salud Manualmente</h2>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                    <form id="form-add-center" class="space-y-4">
+                        <div>
+                            <label class="block text-sm font-medium text-slate-700">Nombre del Centro</label>
+                            <input type="text" id="add-center-nombre" required class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-brand-500 focus:ring-brand-500 px-3 py-2 border">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-slate-700">Tipo de Centro</label>
+                            <select id="add-center-tipo" required class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-brand-500 focus:ring-brand-500 px-3 py-2 border">
+                                <option value="Hospital">Hospital</option>
+                                <option value="Clínica">Clínica</option>
+                                <option value="Ambulatorio">Ambulatorio</option>
+                                <option value="CDI">CDI</option>
+                                <option value="Consultorio">Consultorio</option>
+                            </select>
+                        </div>
+                        <div class="grid grid-cols-2 gap-4">
+                            <div>
+                                <label class="block text-sm font-medium text-slate-700">Latitud</label>
+                                <input type="number" step="any" id="add-center-lat" required class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-brand-500 focus:ring-brand-500 px-3 py-2 border" readonly>
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-slate-700">Longitud</label>
+                                <input type="number" step="any" id="add-center-lng" required class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-brand-500 focus:ring-brand-500 px-3 py-2 border" readonly>
+                            </div>
+                        </div>
+                        <p class="text-xs text-slate-500 mt-1">Haz clic en el mapa para establecer las coordenadas exactas.</p>
+                        <button type="submit" class="w-full bg-brand-600 text-white rounded-lg px-4 py-2 hover:bg-brand-700 transition font-medium mt-2">Agregar Centro</button>
+                    </form>
+                </div>
+                <div>
+                    <div id="map-admin" class="w-full h-80 rounded-xl border border-slate-300 shadow-inner z-10 relative"></div>
+                </div>
+            </div>
+            
+            <hr class="my-8 border-slate-200" />
+            
+            <!-- Listado de Centros Registrados -->
+            <div>
+                <h3 class="text-lg font-semibold mb-4 text-slate-800 flex items-center gap-2">
+                    <svg class="w-5 h-5 text-brand-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+                    </svg>
+                    Centros de Salud Registrados (Oficiales)
+                </h3>
+                <div class="overflow-x-auto rounded-xl border border-slate-200 shadow-sm bg-white">
+                    <table class="w-full text-left text-sm whitespace-nowrap bg-white">
+                        <thead class="bg-slate-50 border-b border-slate-200 text-slate-500 uppercase tracking-wider text-xs font-semibold">
+                            <tr>
+                                <th class="px-6 py-4">ID</th>
+                                <th class="px-6 py-4">Nombre</th>
+                                <th class="px-6 py-4">Tipo</th>
+                                <th class="px-6 py-4">Coordenadas</th>
+                                <th class="px-6 py-4 text-right">Acciones</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-slate-100">
+                            {% for center in approved_centers %}
+                            <tr class="hover:bg-slate-50/50 transition-colors group">
+                                <td class="px-6 py-4 text-slate-500 font-mono text-xs">#{{ center.id }}</td>
+                                <td class="px-6 py-4">
+                                    <div class="font-medium text-slate-900">{{ center.nombre }}</div>
+                                </td>
+                                <td class="px-6 py-4 text-slate-600">
+                                    <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-brand-50 text-brand-800 border border-brand-200">
+                                        {{ center.tipo }}
+                                    </span>
+                                </td>
+                                <td class="px-6 py-4 text-slate-500 text-xs font-mono">
+                                    {% if center.latitud and center.longitud %}
+                                    {{ "%.5f"|format(center.latitud) }}, {{ "%.5f"|format(center.longitud) }}
+                                    {% else %}
+                                    Sin coordenadas
+                                    {% endif %}
+                                </td>
+                                <td class="px-6 py-4 text-right space-x-2">
+                                    {% if center.latitud and center.longitud %}
+                                    <button onclick="focusCenter({{ center.latitud }}, {{ center.longitud }}, '{{ center.nombre|escape }}', '{{ center.tipo|escape }}')" 
+                                            class="inline-flex items-center px-3 py-1.5 rounded-lg bg-blue-50 text-blue-600 hover:bg-blue-100 font-medium text-xs transition-colors">
+                                        Ver en Mapa
+                                    </button>
+                                    {% endif %}
+                                    <button onclick="deleteApprovedCenter({{ center.id }}, '{{ center.nombre|escape }}')" 
+                                            class="inline-flex items-center px-3 py-1.5 rounded-lg bg-red-50 text-red-600 hover:bg-red-100 font-medium text-xs transition-colors">
+                                        Eliminar
+                                    </button>
+                                </td>
+                            </tr>
+                            {% else %}
+                            <tr>
+                                <td colspan="5" class="px-6 py-8 text-center text-slate-500">
+                                    No hay centros de salud oficiales registrados aún.
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        async function handleAction(action, userId) {
+            let confirmMsg = "";
+            let confirmButton = "";
+            let color = "";
+            
+            if(action === 'approve') { confirmMsg = "¿Aprobar a este usuario para que pueda cargar pacientes?"; confirmButton = "Aprobar"; color = "#10b981"; }
+            else if(action === 'restrict') { confirmMsg = "¿Restringir el acceso a este usuario?"; confirmButton = "Restringir"; color = "#f97316"; }
+            else if(action === 'delete') { confirmMsg = "¿Eliminar permanentemente a este usuario? Esto también borrará su carnet."; confirmButton = "Eliminar"; color = "#ef4444"; }
+            
+            const result = await Swal.fire({
+                title: 'Confirmación',
+                text: confirmMsg,
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonColor: color,
+                cancelButtonColor: '#94a3b8',
+                confirmButtonText: confirmButton,
+                cancelButtonText: 'Cancelar'
+            });
+
+            if (result.isConfirmed) {
+                try {
+                    const response = await fetch(`/admin/action/${action}/${userId}`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' }
+                    });
+                    
+                    const data = await response.json();
+                    if(response.ok) {
+                        await Swal.fire('Éxito', data.message, 'success');
+                        window.location.reload();
+                    } else {
+                        Swal.fire('Error', data.error || 'Ocurrió un error', 'error');
+                    }
+                } catch(e) {
+                    Swal.fire('Error', 'No se pudo conectar al servidor.', 'error');
+                }
+            }
+        }
+
+        async function editUser(userId, currentName, currentCenter) {
+            const { value: formValues } = await Swal.fire({
+                title: 'Editar Usuario',
+                html:
+                    `<div class="text-left"><label class="text-sm font-medium text-slate-700">Nombre</label>` +
+                    `<input id="swal-input1" class="swal2-input w-full mx-0 mt-1" value="${currentName}"></div>` +
+                    `<div class="text-left mt-4"><label class="text-sm font-medium text-slate-700">Centro Médico</label>` +
+                    `<input id="swal-input2" class="swal2-input w-full mx-0 mt-1" value="${currentCenter}"></div>`,
+                focusConfirm: false,
+                showCancelButton: true,
+                confirmButtonText: 'Guardar',
+                cancelButtonText: 'Cancelar',
+                preConfirm: () => {
+                    const nombre = document.getElementById('swal-input1').value.trim();
+                    const centro = document.getElementById('swal-input2').value.trim();
+                    if (!/^[a-zA-ZáéíóúÁÉÍÓÚñÑ\s]{2,20}$/.test(nombre)) {
+                        Swal.showValidationMessage('El nombre debe contener únicamente letras y tener entre 2 y 20 caracteres.');
+                        return false;
+                    }
+                    if (!/^[a-zA-ZáéíóúÁÉÍÓÚñÑ\s]{8,50}$/.test(centro)) {
+                        Swal.showValidationMessage('El centro de salud debe contener únicamente letras y tener entre 8 y 50 caracteres.');
+                        return false;
+                    }
+                    return [nombre, centro];
+                }
+            });
+
+            if (formValues) {
+                const formData = new FormData();
+                if(formValues[0] !== currentName) formData.append('nombre', formValues[0]);
+                if(formValues[1] !== currentCenter) formData.append('centro_medico_asociado', formValues[1]);
+                
+                try {
+                    const response = await fetch(`/admin/action/edit/${userId}`, {
+                        method: 'POST',
+                        body: formData
+                    });
+                    const data = await response.json();
+                    if(response.ok) {
+                        await Swal.fire('Actualizado', 'Datos guardados', 'success');
+                        window.location.reload();
+                    } else {
+                        Swal.fire('Error', data.error, 'error');
+                    }
+                } catch(e) {
+                    Swal.fire('Error', 'No se pudo conectar.', 'error');
+                }
+            }
+        }
+
+        function switchTab(tab) {
+            const tabs = ['staff', 'centers', 'add-center'];
+            tabs.forEach(t => {
+                const btn = document.getElementById('tab-' + t);
+                const content = document.getElementById('content-' + t);
+                if(t === tab) {
+                    btn.className = "inline-block p-4 text-brand-600 border-b-2 border-brand-600 rounded-t-lg active relative";
+                    content.classList.remove('hidden');
+                    
+                    if(tab === 'add-center') {
+                        setTimeout(() => {
+                            if(adminMap) adminMap.invalidateSize();
+                        }, 200);
+                    }
+                } else {
+                    btn.className = "inline-block p-4 border-b-2 border-transparent rounded-t-lg hover:text-slate-600 hover:border-slate-300";
+                    content.classList.add('hidden');
+                }
+            });
+        }
+
+        let adminMap = null;
+        let adminMarker = null;
+
+        document.addEventListener('DOMContentLoaded', () => {
+            if(document.getElementById('map-admin')) {
+                adminMap = L.map('map-admin').setView([11.4045, -69.6734], 8); // Falcón center
+                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                    attribution: '&copy; OSM',
+                    maxZoom: 18,
+                }).addTo(adminMap);
+
+                adminMap.on('click', function(e) {
+                    const lat = e.latlng.lat.toFixed(6);
+                    const lng = e.latlng.lng.toFixed(6);
+                    document.getElementById('add-center-lat').value = lat;
+                    document.getElementById('add-center-lng').value = lng;
+                    
+                    if (adminMarker) {
+                        adminMarker.setLatLng(e.latlng);
+                    } else {
+                        adminMarker = L.marker(e.latlng).addTo(adminMap);
+                    }
+                });
+
+                const nombreEl = document.getElementById('add-center-nombre');
+                nombreEl.addEventListener('input', () => validateInput(nombreEl));
+                nombreEl.addEventListener('blur', () => validateInput(nombreEl));
+
+                document.getElementById('form-add-center').addEventListener('submit', async (e) => {
+                    e.preventDefault();
+                    if (!validateInput(nombreEl)) {
+                        return;
+                    }
+                    const btn = e.target.querySelector('button[type="submit"]');
+                    btn.disabled = true;
+                    btn.textContent = 'Guardando...';
+
+                    const formData = new FormData();
+                    formData.append('nombre', document.getElementById('add-center-nombre').value);
+                    formData.append('tipo', document.getElementById('add-center-tipo').value);
+                    formData.append('latitud', document.getElementById('add-center-lat').value);
+                    formData.append('longitud', document.getElementById('add-center-lng').value);
+                    
+                    try {
+                        const response = await fetch('/admin/health_center/add', {
+                            method: 'POST',
+                            body: formData
+                        });
+                        const data = await response.json();
+                        if(response.ok) {
+                            await Swal.fire('Éxito', data.message, 'success');
+                            window.location.reload();
+                        } else {
+                            Swal.fire('Error', data.error, 'error');
+                        }
+                    } catch(e) {
+                        Swal.fire('Error', 'No se pudo conectar.', 'error');
+                    } finally {
+                        btn.disabled = false;
+                        btn.textContent = 'Agregar Centro';
+                    }
+                });
+            }
+        });
+
+        async function approveCenter(centerId, currentName, currentTipo) {
+            const { value: formValues } = await Swal.fire({
+                title: 'Aprobar Centro',
+                html:
+                    `<div class="text-left"><label class="text-sm font-medium text-slate-700">Nombre Oficial</label>` +
+                    `<input id="center-nombre" class="swal2-input w-full mx-0 mt-1" value="${currentName}"></div>` +
+                    `<div class="text-left mt-4"><label class="text-sm font-medium text-slate-700">Tipo</label>` +
+                    `<input id="center-tipo" class="swal2-input w-full mx-0 mt-1" value="${currentTipo}"></div>` +
+                    `<div class="text-left mt-4"><label class="text-sm font-medium text-slate-700">Latitud</label>` +
+                    `<input id="center-lat" type="number" step="any" class="swal2-input w-full mx-0 mt-1" value=""></div>` +
+                    `<div class="text-left mt-4"><label class="text-sm font-medium text-slate-700">Longitud</label>` +
+                    `<input id="center-lng" type="number" step="any" class="swal2-input w-full mx-0 mt-1" value=""></div>`,
+                focusConfirm: false,
+                showCancelButton: true,
+                confirmButtonText: 'Aprobar',
+                cancelButtonText: 'Cancelar',
+                preConfirm: () => {
+                    const nombre = document.getElementById('center-nombre').value.trim();
+                    const tipo = document.getElementById('center-tipo').value.trim();
+                    const lat = document.getElementById('center-lat').value.trim();
+                    const lng = document.getElementById('center-lng').value.trim();
+                    
+                    if (!/^[a-zA-ZáéíóúÁÉÍÓÚñÑ\s]{8,50}$/.test(nombre)) {
+                        Swal.showValidationMessage('El nombre del centro debe contener únicamente letras y tener entre 8 y 50 caracteres.');
+                        return false;
+                    }
+                    if (!tipo) {
+                        Swal.showValidationMessage('El tipo es obligatorio.');
+                        return false;
+                    }
+                    return [nombre, tipo, lat, lng];
+                }
+            });
+
+            if (formValues) {
+                const formData = new FormData();
+                formData.append('nombre', formValues[0]);
+                formData.append('tipo', formValues[1]);
+                if(formValues[2]) formData.append('latitud', formValues[2]);
+                if(formValues[3]) formData.append('longitud', formValues[3]);
+                
+                try {
+                    const response = await fetch(`/admin/health_center/action/approve/${centerId}`, {
+                        method: 'POST',
+                        body: formData
+                    });
+                    const data = await response.json();
+                    if(response.ok) {
+                        await Swal.fire('Aprobado', 'El centro ahora es visible.', 'success');
+                        window.location.reload();
+                    } else {
+                        Swal.fire('Error', data.error, 'error');
+                    }
+                } catch(e) {
+                    Swal.fire('Error', 'No se pudo conectar.', 'error');
+                }
+            }
+        }
+
+        async function rejectCenter(centerId) {
+            const { value: targetId } = await Swal.fire({
+                title: 'Rechazar / Fusionar',
+                html: '<p class="text-sm text-slate-600 mb-4 text-left">Para fusionar (y reasignar pacientes a un centro existente), ingresa el ID del Centro de destino. Deja en blanco para simplemente eliminar la solicitud.</p>' +
+                      '<input id="merge-id" type="number" placeholder="ID del centro existente (opcional)" class="swal2-input w-full mx-0">',
+                showCancelButton: true,
+                confirmButtonText: 'Proceder',
+                confirmButtonColor: '#ef4444',
+                preConfirm: () => document.getElementById('merge-id').value
+            });
+
+            if (targetId !== undefined) {
+                const formData = new FormData();
+                if(targetId.trim() !== '') {
+                    formData.append('merge_to_id', targetId.trim());
+                }
+                try {
+                    const response = await fetch(`/admin/health_center/action/reject/${centerId}`, {
+                        method: 'POST',
+                        body: formData
+                    });
+                    const data = await response.json();
+                    if(response.ok) {
+                        await Swal.fire('Éxito', data.message, 'success');
+                        window.location.reload();
+                    } else {
+                        Swal.fire('Error', data.error, 'error');
+                    }
+                } catch(e) {
+                    Swal.fire('Error', 'No se pudo conectar.', 'error');
+                }
+            }
+        }
+
+        function focusCenter(lat, lng, name, type) {
+            if (adminMap && lat && lng) {
+                const latlng = [parseFloat(lat), parseFloat(lng)];
+                adminMap.setView(latlng, 13);
+                
+                if (adminMarker) {
+                    adminMarker.setLatLng(latlng);
+                } else {
+                    adminMarker = L.marker(latlng).addTo(adminMap);
+                }
+                adminMarker.bindPopup(`<b>${name}</b><br>${type}`).openPopup();
+                
+                document.getElementById('add-center-lat').value = lat;
+                document.getElementById('add-center-lng').value = lng;
+                
+                // Scroll smoothly to the form/map if clicked
+                document.getElementById('map-admin').scrollIntoView({ behavior: 'smooth' });
+            }
+        }
+
+        async function deleteApprovedCenter(centerId, centerName) {
+            const { value: targetId } = await Swal.fire({
+                title: 'Eliminar Centro de Salud',
+                html: `<p class="text-sm text-slate-600 mb-4 text-left">¿Seguro que deseas eliminar el centro <b>"${centerName}"</b>?<br><br>Si tiene pacientes asociados, ingresa el ID del centro de salud de destino para reasignarlos. Deja en blanco para eliminar directamente (puede fallar si hay restricciones de clave foránea).</p>` +
+                      '<input id="merge-id" type="number" placeholder="ID del centro de destino (opcional)" class="swal2-input w-full mx-0">',
+                showCancelButton: true,
+                confirmButtonText: 'Eliminar / Fusionar',
+                confirmButtonColor: '#ef4444',
+                cancelButtonColor: '#94a3b8',
+                preConfirm: () => document.getElementById('merge-id').value
+            });
+
+            if (targetId !== undefined) {
+                const formData = new FormData();
+                if(targetId.trim() !== '') {
+                    formData.append('merge_to_id', targetId.trim());
+                }
+                try {
+                    const response = await fetch(`/admin/health_center/action/reject/${centerId}`, {
+                        method: 'POST',
+                        body: formData
+                    });
+                    const data = await response.json();
+                    if(response.ok) {
+                        await Swal.fire('Éxito', data.message, 'success');
+                        window.location.reload();
+                    } else {
+                        Swal.fire('Error', data.error, 'error');
+                    }
+                } catch(e) {
+                    Swal.fire('Error', 'No se pudo conectar.', 'error');
+                }
+            }
+        }
+
+        function showTooltip(input, message) {
+            let tooltip = document.getElementById(`tooltip-${input.id}`);
+            if (!tooltip) {
+                tooltip = document.createElement('div');
+                tooltip.id = `tooltip-${input.id}`;
+                tooltip.className = 'validation-tooltip';
+                const arrow = document.createElement('div');
+                arrow.className = 'validation-tooltip-arrow';
+                tooltip.appendChild(arrow);
+                const text = document.createElement('span');
+                text.id = `tooltip-text-${input.id}`;
+                tooltip.appendChild(text);
+                document.body.appendChild(tooltip);
+            }
+            
+            document.getElementById(`tooltip-text-${input.id}`).textContent = message;
+            
+            const rect = input.getBoundingClientRect();
+            const scrollLeft = window.pageXOffset || document.documentElement.scrollLeft;
+            const scrollTop = window.pageYOffset || document.documentElement.scrollTop;
+            
+            tooltip.style.left = `${rect.left + scrollLeft}px`;
+            tooltip.style.top = `${rect.bottom + scrollTop + 6}px`;
+            tooltip.style.width = `${Math.max(rect.width, 200)}px`;
+            
+            tooltip.classList.add('visible');
+            input.classList.add('border-red-500', 'ring-2', 'ring-red-200');
+        }
+
+        function hideTooltip(input) {
+            const tooltip = document.getElementById(`tooltip-${input.id}`);
+            if (tooltip) {
+                tooltip.classList.remove('visible');
+                setTimeout(() => {
+                    if (!tooltip.classList.contains('visible')) {
+                        tooltip.remove();
+                    }
+                }, 200);
+            }
+            input.classList.remove('border-red-500', 'ring-2', 'ring-red-200');
+        }
+
+        function validateInput(input) {
+            const val = input.value.trim();
+            
+            if (input.id === 'add-center-nombre') {
+                if (!val) {
+                    showTooltip(input, 'Este campo es obligatorio.');
+                    return false;
+                }
+                if (val.length < 8 || val.length > 50) {
+                    showTooltip(input, 'El centro de salud debe tener entre 8 y 50 caracteres.');
+                    return false;
+                }
+                if (!/^[a-zA-ZáéíóúÁÉÍÓÚñÑ\s]+$/.test(val)) {
+                    showTooltip(input, 'El nombre debe contener únicamente letras y espacios.');
+                    return false;
+                }
+            }
+
+            hideTooltip(input);
+            return true;
+        }
+    </script>
+</body>
+</html>
